@@ -2,11 +2,12 @@ use crate::api_error::ApiError;
 use crate::models::{CreatePostPayload, UpdatePostPayload};
 use crate::services::PostService;
 use anyhow::Result;
-use axum::extract::{Json, Path, State};
+use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 use uuid::Uuid;
+use crate::dtos::Pagination;
 
 // 定义应用状态，包含服务实例
 // 使用 Arc 来安全地在多个线程间共享服务实例
@@ -29,9 +30,11 @@ pub async fn create_post_handler(
 // 获取文章列表处理器
 pub async fn list_posts_handler(
     State(state): State<AppState>,
+    Query(pagination): Query<Pagination>, // 使用 Query 提取器获取分页参数
 ) -> Result<impl IntoResponse, ApiError> {
-    let posts = state.post_service.list_posts().await?;
-    Ok(Json(posts))
+    // 将提取到的 pagination 参数传递给 service 方法
+    let paginated_response = state.post_service.list_posts(pagination).await?;
+    Ok(Json(paginated_response))
 }
 
 // 获取单篇文章处理器
