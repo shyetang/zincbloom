@@ -53,13 +53,13 @@ impl Pagination {
 }
 
 // 通用的分页响应结构体
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PaginatedResponse<T> {
-    items: Vec<T>,    // 当前页的数据列表
-    total_items: i64, // 总记录数（从数据库 COUNT(*) 获取）
-    page: u64,        // 当前页码
-    page_size: u64,   // 每页数量
-    total_pages: i64, // 总页数(计算得出）
+    pub items: Vec<T>,    // 当前页的数据列表
+    pub total_items: i64, // 总记录数（从数据库 COUNT(*) 获取）
+    pub page: u64,        // 当前页码
+    pub page_size: u64,   // 每页数量
+    pub total_pages: i64, // 总页数(计算得出）
 }
 
 impl<T> PaginatedResponse<T> {

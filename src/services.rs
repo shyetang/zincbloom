@@ -1,10 +1,10 @@
+use crate::dtos::{PaginatedResponse, Pagination};
 use crate::models::{CreatePostPayload, Post, UpdatePostPayload};
 use crate::repositories::PostRepository;
 use anyhow::{Context, Result, anyhow};
 use slug::slugify;
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::dtos::{PaginatedResponse, Pagination};
 
 // Post服务结构体，持有仓库的引用（使用Arc<dyn Trait>支持多态和共享）
 #[derive(Clone)]
@@ -62,20 +62,22 @@ impl PostService {
         post_option.ok_or_else(|| anyhow!("未找到 slug 为 '{}' 的帖子", slug))
     }
 
-    pub async fn list_posts(&self,pagination: Pagination) -> Result<PaginatedResponse<Post>> {
+    pub async fn list_posts(&self, pagination: Pagination) -> Result<PaginatedResponse<Post>> {
         // 从 Pagination DTO 获取验证过的分页参数
         let limit = pagination.limit();
         let offset = pagination.offset();
         let page = pagination.page();
         let page_size = pagination.page_size();
-        
+
         // 调用仓库方法
-        let (posts, total_items) = self.repo.list(limit, offset)
+        let (posts, total_items) = self
+            .repo
+            .list(limit, offset)
             .await
             .context("Service 未能获取分页的帖子列表")?;
-        
+
         let response = PaginatedResponse::new(posts, total_items, page, page_size);
-        
+
         Ok(response)
     }
 

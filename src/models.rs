@@ -16,7 +16,7 @@ pub struct Post {
 }
 
 // 用于创建新文章的数据结构（DTO - Data Transfer Object）
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CreatePostPayload {
     pub title: String,
     pub content: String,
@@ -24,10 +24,15 @@ pub struct CreatePostPayload {
 }
 
 // 用于更新文章的数据结构（DTO）
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct UpdatePostPayload {
     pub title: Option<String>, // 使用 Option 表示可选更新
     pub content: Option<String>,
     pub slug: Option<String>,
-    pub published_at: Option<Option<DateTime<Utc>>>, // Option<Option<...>> 允许设置为 NULL
+    // 用于设置或更改发布时间
+    pub published_at: Option<DateTime<Utc>>, // Option<Option<...>> 允许设置为 NULL
+    // 明确的标志来指示是否要撤销发布 (将 published_at 置为 NULL)
+    // serde(default) 使得如果 JSON 中不提供 unpublish，它默认为 false。
+    #[serde(default)]
+    pub unpublish: bool,
 }

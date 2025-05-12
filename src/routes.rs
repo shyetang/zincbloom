@@ -21,5 +21,5 @@ pub fn create_router(app_state: AppState) -> Router {
                 .put(update_post_handler)
                 .delete(delete_post_handler),
         )
-        .with_state(app_state)  // 将共享状态注入路由
+        .with_state(app_state) // 将共享状态注入路由
 }

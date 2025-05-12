@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select count(*) as \"count!\" from posts\n             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 同样需要过滤\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9ee5e445ffcfd9d26cddb3db4959fbf21ea3f8c76b9f92ee373ca98365998ff2"
+}

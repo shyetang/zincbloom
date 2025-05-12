@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
 
     // 设置数据库连接池
     let db_pool = PgPool::connect(&config.database.url)
-        .await 
+        .await
         .context("连接数据库失败")?;
     tracing::info!("数据库连接池已连接。");
 
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context(format!("绑定端口 {} 失败", addr))?;
-    
+
     axum::serve(listener, app.into_make_service())
         .await
         .context("启动Axum 服务器失败")?;
