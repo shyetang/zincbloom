@@ -1,6 +1,6 @@
 # Rust / Cargo
-/target/
-#Cargo.lock  # 对于应用项目，通常建议提交 Cargo.lock；如果是库项目，则忽略
+backend/target/
+#backend/Cargo.lock  # 对于应用项目，通常建议提交 Cargo.lock；如果是库项目，则忽略
 
 # IDE / Editor specific
 .vscode/
@@ -13,8 +13,9 @@
 Thumbs.db
 
 # Environment variables file (不应提交敏感信息)
+backend/.env
 .env
-
+.env.*
 # SQLx offline data (如果你选择不跟踪它，但通常建议跟踪)
 # sqlx-data.json
 

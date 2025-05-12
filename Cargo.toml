@@ -1,36 +1,17 @@
-[package]
-name = "blog-backend"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2" # 推荐为新的工作空间设置 resolver 版本为 "2"
 
-[dependencies]
-axum = "0.8"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sqlx = { version = "0.8", features = [
-    "runtime-tokio",
-    "postgres",
-    "uuid",
-    "chrono",
-    "macros",
-] }
-async-trait = "0.1"
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
-config = "0.15"
-#thiserror = "2"
-anyhow = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-slug = "0.1"
-[dev-dependencies]
-anyhow = "1.0"
-serde_json = "1"
-# 需要 "util" feature 来启用 ServiceExt trait 和 oneshot 方法
-tower = { version = "0.5", features = ["util"] }
-#hyper = { version = "1.6", features = ["full"] } # oneshot 通常也需要 hyper 类型
-http-body-util = "0.1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# 列出工作空间中的成员包 (相对于这个 Cargo.toml 文件的路径)
+members = [
+    "backend", # 指向你的后端项目目录
+    # "frontend-admin-panel", # 示例：如果未来有一个用 Rust 写的管理后台
+    # "shared-utils",         # 示例：如果未来有一个共享的 Rust 工具库
+]
+
+# 可以在这里定义整个工作空间共享的 profile 设置
+# 例如，为 release 构建进行优化
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
