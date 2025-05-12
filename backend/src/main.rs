@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use blog_backend::config::AppConfig;
-use blog_backend::handlers::AppState;
-use blog_backend::repositories::{PostRepository, PostgresPostRepository};
-use blog_backend::routes::create_router;
-use blog_backend::services::PostService;
+use backend::config::AppConfig;
+use backend::handlers::AppState;
+use backend::repositories::{PostRepository, PostgresPostRepository};
+use backend::routes::create_router;
+use backend::services::PostService;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;

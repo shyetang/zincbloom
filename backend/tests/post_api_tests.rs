@@ -8,7 +8,7 @@ use axum::{
 
 use tower::ServiceExt;
 
-use blog_backend::{
+use backend::{
     dtos::PaginatedResponse,
     handlers::AppState,
     models::Post,
@@ -23,7 +23,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use blog_backend::models::{CreatePostPayload, UpdatePostPayload};
+use backend::models::{CreatePostPayload, UpdatePostPayload};
 use http_body_util::BodyExt;
 
 use std::sync::Once;
