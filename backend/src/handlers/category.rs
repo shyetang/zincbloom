@@ -5,9 +5,9 @@ use axum::{
 };
 
 use crate::api_error::ApiError;
-use crate::dtos::{CreateCategoryPayload, UpdateCategoryPayload};
 use crate::handlers::AppState;
 use uuid::Uuid;
+use crate::dtos::category::{CreateCategoryPayload, UpdateCategoryPayload};
 
 /// 创建新分类的 Handler
 pub async fn create_category_handler(

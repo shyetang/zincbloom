@@ -9,7 +9,6 @@ use axum::{
 use tower::ServiceExt;
 
 use backend::{
-    dtos::PaginatedResponse,
     handlers::AppState,
     models::Post,
     repositories::{PostRepository, PostgresPostRepository},
@@ -23,9 +22,10 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use backend::models::{CreatePostPayload, UpdatePostPayload};
 use http_body_util::BodyExt;
 
+use backend::dtos::post::PaginatedResponse;
+use backend::models::post::{CreatePostPayload, UpdatePostPayload};
 use backend::repositories::{CategoryRepository, PostgresCategoryRepository};
 use backend::services::CategoryService;
 use std::sync::Once;

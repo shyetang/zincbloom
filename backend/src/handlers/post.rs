@@ -1,15 +1,14 @@
 use crate::api_error::ApiError;
-use crate::dtos::Pagination;
-use crate::models::{CreatePostPayload, UpdatePostPayload};
+use crate::dtos::post::Pagination;
+use crate::handlers::AppState;
+use crate::models::post::{CreatePostPayload, UpdatePostPayload};
 use anyhow::Result;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use uuid::Uuid;
-use crate::handlers::AppState;
 // 定义应用状态，包含服务实例
 // 使用 Arc 来安全地在多个线程间共享服务实例
-
 
 // Handler 返回 Result<impl IntoResponse, ApiError>
 // ApiError 实现了 From<anyhow::Error>,所以可以在 service 调用后用 '?'

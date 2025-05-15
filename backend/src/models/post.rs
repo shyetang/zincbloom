@@ -37,12 +37,3 @@ pub struct UpdatePostPayload {
     pub unpublish: bool,
 }
 
-// Category 分类结构体
-#[derive(Debug,Serialize,Deserialize,Clone,FromRow)]
-pub struct Category {
-    pub id: Uuid,
-    pub name: String,
-    pub slug: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}

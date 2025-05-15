@@ -1,5 +1,6 @@
-use crate::dtos::{PaginatedResponse, Pagination};
-use crate::models::{CreatePostPayload, Post, UpdatePostPayload};
+use crate::dtos::post::{PaginatedResponse, Pagination};
+use crate::models::Post;
+use crate::models::post::{CreatePostPayload, UpdatePostPayload};
 use crate::repositories::PostRepository;
 use anyhow::{Context, Result, anyhow};
 use slug::slugify;
