@@ -37,9 +37,8 @@ pub trait CategoryRepository: Send + Sync {
     async fn delete(&self, id: Uuid) -> Result<()>;
 
     // 以后可能用到的方法
-    // /// 检查具有给定名称的分类是否存在
+    // ///检查具有给定名称的分类是否存在
     // async fn name_exists(&self,name:&str)->Result<bool>;
-    //
     // /// 检查具有给定 slug 的分类是否已存在
     // async fn slug_exists(&self,slug:&str)->Result<bool>;
 }
