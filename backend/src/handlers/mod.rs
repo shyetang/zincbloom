@@ -1,3 +1,4 @@
+pub mod category;
 pub mod post;
 
 pub use post::{
@@ -5,9 +6,13 @@ pub use post::{
     update_post_handler,
 };
 
-use std::sync::Arc;
+pub use category::{
+    create_category_handler, delete_category_handler, get_category_handler,
+    list_categories_handler, update_category_handler,
+};
 
-use crate::services::{CategoryService,PostService};
+use crate::services::{CategoryService, PostService};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
