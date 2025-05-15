@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 use backend::config::AppConfig;
 use backend::handlers::AppState;
-use backend::repositories::{PostRepository, PostgresPostRepository};
+use backend::repositories::{CategoryRepository, PostRepository, PostgresCategoryRepository, PostgresPostRepository};
 use backend::routes::create_router;
-use backend::services::PostService;
+use backend::services::{CategoryService, PostService};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -35,10 +35,18 @@ async fn main() -> Result<()> {
     tracing::info!("数据库迁移已应用。");*/
 
     //  -- 依赖注入 --
+    //  -- 创建 PostService 实例 ---
     let post_repo = Arc::new(PostgresPostRepository::new(db_pool.clone()));
     let post_repo_trait: Arc<dyn PostRepository> = post_repo;
     let post_service = Arc::new(PostService::new(post_repo_trait));
-    let app_state = AppState { post_service };
+    
+    //  -- 创建 CategoryService 实例 ---
+    let category_repo = Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
+    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
+    let category_service = Arc::new(CategoryService::new(category_repo_trait));
+    
+    // 创建 AppState
+    let app_state = AppState { post_service, category_service };
 
     // 创建 Axum 路由
     let app = create_router(app_state);
