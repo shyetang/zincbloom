@@ -26,8 +26,11 @@ use uuid::Uuid;
 use backend::models::{CreatePostPayload, UpdatePostPayload};
 use http_body_util::BodyExt;
 
+use backend::repositories::{CategoryRepository, PostgresCategoryRepository};
+use backend::services::CategoryService;
 use std::sync::Once;
-use tracing_subscriber::EnvFilter; // 导入 EnvFilter
+use tracing_subscriber::EnvFilter;
+// 导入 EnvFilter
 
 static TRACING_INIT_TEST: Once = Once::new();
 // use hyper::body;
@@ -44,8 +47,15 @@ async fn setup_test_app(pool: PgPool) -> Router {
     let post_repo_trait: Arc<dyn PostRepository> = post_repo;
     let post_service = Arc::new(PostService::new(post_repo_trait));
 
+    let category_repo = Arc::new(PostgresCategoryRepository::new(pool.clone()));
+    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
+    let category_service = Arc::new(CategoryService::new(category_repo_trait));
+
     // 2. 创建应用状态
-    let app_state = AppState { post_service };
+    let app_state = AppState {
+        post_service,
+        category_service,
+    };
 
     // 3. 创建Router
     create_router(app_state)
