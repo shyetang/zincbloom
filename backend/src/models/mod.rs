@@ -1,5 +1,5 @@
-pub mod post;
 pub mod category;
+pub mod post;
 
-pub use post::Post;
 pub use category::Category;
+pub use post::Post;

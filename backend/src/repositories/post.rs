@@ -1,10 +1,10 @@
 use crate::models::Post;
-use crate::models::post::{CreatePostPayload, UpdatePostPayload};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
+use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
 
 // 定义仓库操作的 trait
 #[async_trait]
@@ -57,9 +57,9 @@ impl PostRepository for PostgresPostRepository {
             now,
             None::<DateTime<Utc>>
         )
-        .fetch_one(&self.pool)
-        .await
-        .context("创建 Post 记录 失败 (INSERT)")?; // 使用 ？ 和 context
+            .fetch_one(&self.pool)
+            .await
+            .context("创建 Post 记录 失败 (INSERT)")?; // 使用 ？ 和 context
         Ok(post)
     }
 
@@ -118,9 +118,9 @@ impl PostRepository for PostgresPostRepository {
              -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 同样需要过滤
             "#
         )
-        .fetch_one(&self.pool)
-        .await
-        .context("查询帖子总数失败")?;
+            .fetch_one(&self.pool)
+            .await
+            .context("查询帖子总数失败")?;
 
         // 从结果中获取 count 值，注意类型可能需要转换
         // query! 返回的 count 通常是 i64 或 Decimal，取决于数据库和 COUNT(*) 的结果
@@ -216,7 +216,7 @@ impl PostRepository for PostgresPostRepository {
         )
             .fetch_one(&self.pool)
             .await
-            .context(format!("数据库层面更新 Post (id: {}) 失败",id))?;
+            .context(format!("数据库层面更新 Post (id: {}) 失败", id))?;
 
         tracing::info!(
             "[REPO UPDATE DEBUG] Post returned from DB - published_at: {:?}",

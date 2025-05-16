@@ -24,12 +24,11 @@ use uuid::Uuid;
 
 use http_body_util::BodyExt;
 
-use backend::dtos::post::PaginatedResponse;
-use backend::models::post::{CreatePostPayload, UpdatePostPayload};
 use backend::repositories::{CategoryRepository, PostgresCategoryRepository};
 use backend::services::CategoryService;
 use std::sync::Once;
 use tracing_subscriber::EnvFilter;
+use backend::dtos::{CreatePostPayload, PaginatedResponse, UpdatePostPayload};
 // 导入 EnvFilter
 
 static TRACING_INIT_TEST: Once = Once::new();

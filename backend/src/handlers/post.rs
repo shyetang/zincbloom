@@ -1,12 +1,12 @@
 use crate::api_error::ApiError;
-use crate::dtos::post::Pagination;
+use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
 use crate::handlers::AppState;
-use crate::models::post::{CreatePostPayload, UpdatePostPayload};
 use anyhow::Result;
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use uuid::Uuid;
+use crate::dtos::Pagination;
 // 定义应用状态，包含服务实例
 // 使用 Arc 来安全地在多个线程间共享服务实例
 

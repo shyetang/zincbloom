@@ -1,85 +1,25 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-// 用于接收分页查询参数的结构体
-#[derive(Debug, Deserialize)]
-pub struct Pagination {
-    #[serde(default = "default_page")]
-    page: u64, // 页码（从1开始）
-    #[serde(default = "default_page_size")]
-    page_size: u64, // 每页数量
+// 用于创建新文章的数据结构（DTO - Data Transfer Object）
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreatePostPayload {
+    pub title: String,
+    pub content: String,
+    // 注意：创建时通常不需要 slug 和 published_at，slug 应自动生成，published_at 应为 None
 }
 
-// page 的默认值函数
-fn default_page() -> u64 {
-    1 // 默认页码为 1
+// 用于更新文章的数据结构（DTO）
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct UpdatePostPayload {
+    pub title: Option<String>, // 使用 Option 表示可选更新
+    pub content: Option<String>,
+    pub slug: Option<String>,
+    // 用于设置或更改发布时间
+    pub published_at: Option<DateTime<Utc>>, // Option<Option<...>> 允许设置为 NULL
+    // 明确的标志来指示是否要撤销发布 (将 published_at 置为 NULL)
+    // serde(default) 使得如果 JSON 中不提供 unpublish，它默认为 false。
+    #[serde(default)]
+    pub unpublish: bool,
 }
 
-// page_size 的默认值函数
-fn default_page_size() -> u64 {
-    10 // 默认每页 10 条
-}
-
-impl Pagination {
-    // 获取经过验证和调整的页码
-    pub fn page(&self) -> u64 {
-        // 页码至少为1
-        if self.page == 0 { 1 } else { self.page }
-    }
-
-    // 获取经过验证和调整的每页数量
-    pub fn page_size(&self) -> u64 {
-        // 可以设置一个最大值，防止一次请求过多数据
-        const MAX_PAGE_SIZE: u64 = 100;
-        if self.page_size == 0 {
-            default_page_size()
-        } else if self.page_size > MAX_PAGE_SIZE {
-            MAX_PAGE_SIZE
-        } else {
-            self.page_size
-        }
-    }
-
-    // 计算数据库查询所需的 limit
-    pub fn limit(&self) -> i64 {
-        self.page_size() as i64 // SQL LIMIT 通常接收 i64 的值
-    }
-
-    // 计算数据库查询所需的 offset
-    pub fn offset(&self) -> i64 {
-        // SQL OFFSET 通常接受 i64
-        // 页码从 1 开始，所以 offset = (page-1) * page_size
-        ((self.page() - 1) * self.page_size()) as i64
-    }
-}
-
-// 通用的分页响应结构体
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PaginatedResponse<T> {
-    pub items: Vec<T>,    // 当前页的数据列表
-    pub total_items: i64, // 总记录数（从数据库 COUNT(*) 获取）
-    pub page: u64,        // 当前页码
-    pub page_size: u64,   // 每页数量
-    pub total_pages: i64, // 总页数(计算得出）
-}
-
-impl<T> PaginatedResponse<T> {
-    // 构造函数，自动计算 total_pages
-    pub fn new(items: Vec<T>, total_items: i64, page: u64, page_size: u64) -> Self {
-        // 计算总页数
-        let total_pages = if page_size == 0 {
-            // 防止除 0
-            0
-        } else {
-            // (total_items + page_size - 1) / page_size 一种常用的向上取整技巧
-            // (total_items as u64 + page_size - 1) / page_size
-            (total_items as u64).div_ceil(page_size)
-        } as i64;
-        PaginatedResponse {
-            items,
-            total_items,
-            page,
-            page_size,
-            total_pages,
-        }
-    }
-}
