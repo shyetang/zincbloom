@@ -1,10 +1,11 @@
 use crate::handlers::{
-    AppState, create_category_handler, create_post_handler, delete_category_handler,
-    delete_post_handler, get_category_handler, get_post_handler, list_categories_handler,
-    list_posts_handler, update_category_handler, update_post_handler,
+    create_category_handler, create_post_handler, create_tag_handler, delete_category_handler,
+    delete_post_handler, delete_tag_handler, get_category_handler, get_post_handler,
+    get_tag_handler, list_categories_handler, list_posts_handler, list_tags_handler,
+    update_category_handler, update_post_handler, update_tag_handler, AppState,
 };
-use axum::Router;
 use axum::routing::{get, post};
+use axum::Router;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
@@ -37,6 +38,19 @@ pub fn create_router(app_state: AppState) -> Router {
             get(get_category_handler)
                 .put(update_category_handler)
                 .delete(delete_category_handler),
+        )
+        // --- Tag 相关的路由 ---
+        // GET /tags -> 获取标签列表
+        // POST /tags -> 创建新标签
+        .route("/tags", get(list_tags_handler).post(create_tag_handler))
+        // GET /tags/{identifier} -> 获取单个标签详情 (identifier 可以是 id 或 slug)
+        // PUT /tags/{id} -> 更新标签 (通常通过 id 更新)
+        // DELETE /tags/{id} -> 删除标签 (通常通过 id 删除)
+        .route(
+            "/tags/{identifier}",
+            get(get_tag_handler)
+                .put(update_tag_handler)
+                .delete(delete_tag_handler),
         )
         .with_state(app_state) // 将共享状态注入路由
 }

@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
 
 use axum::{
-    Router,
     body::Body,
     http::{Request, StatusCode},
+    Router,
 };
 
 use tower::ServiceExt;
@@ -24,11 +24,13 @@ use uuid::Uuid;
 
 use http_body_util::BodyExt;
 
-use backend::repositories::{CategoryRepository, PostgresCategoryRepository};
-use backend::services::CategoryService;
+use backend::dtos::{CreatePostPayload, PaginatedResponse, UpdatePostPayload};
+use backend::repositories::{
+    CategoryRepository, PostgresCategoryRepository, PostgresTagRepository, TagRepository,
+};
+use backend::services::{CategoryService, TagService};
 use std::sync::Once;
 use tracing_subscriber::EnvFilter;
-use backend::dtos::{CreatePostPayload, PaginatedResponse, UpdatePostPayload};
 // 导入 EnvFilter
 
 static TRACING_INIT_TEST: Once = Once::new();
@@ -50,10 +52,15 @@ async fn setup_test_app(pool: PgPool) -> Router {
     let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
     let category_service = Arc::new(CategoryService::new(category_repo_trait));
 
+    let tag_repo = Arc::new(PostgresTagRepository::new(pool.clone()));
+    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
+    let tag_service = Arc::new(TagService::new(tag_repo_trait));
+
     // 2. 创建应用状态
     let app_state = AppState {
         post_service,
         category_service,
+        tag_service,
     };
 
     // 3. 创建Router

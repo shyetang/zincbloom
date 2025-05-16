@@ -3,14 +3,15 @@ use backend::config::AppConfig;
 use backend::handlers::AppState;
 use backend::repositories::{
     CategoryRepository, PostRepository, PostgresCategoryRepository, PostgresPostRepository,
+    PostgresTagRepository, TagRepository,
 };
 use backend::routes::create_router;
-use backend::services::{CategoryService, PostService};
+use backend::services::{CategoryService, PostService, TagService};
 use sqlx::PgPool;
 use std::sync::Arc;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -47,10 +48,16 @@ async fn main() -> Result<()> {
     let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
     let category_service = Arc::new(CategoryService::new(category_repo_trait));
 
+    // -- 创建 TagService 实例 ----
+    let tag_repo = Arc::new(PostgresTagRepository::new(db_pool.clone()));
+    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
+    let tag_service = Arc::new(TagService::new(tag_repo_trait));
+
     // 创建 AppState
     let app_state = AppState {
         post_service,
         category_service,
+        tag_service,
     };
 
     // 创建 Axum 路由
