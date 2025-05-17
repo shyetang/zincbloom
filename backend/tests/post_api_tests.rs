@@ -859,13 +859,8 @@ async fn test_delete_post_invalid_uuid_format(pool: PgPool) -> Result<()> {
     // 断言状态码
     // delete_post_handler 的 Path(id) 参数类型是 Path<Uuid>，
     // Axum 的路径提取器在解析 "this-is-not-a-uuid" 到 Uuid 时会失败。
-    // 这种路径参数解析失败通常会导致 Axum 自动返回 404 Not Found 或有时是 400 Bad Request。
-    // 让我们先预期 404，如果实际是 400 也可以接受。
+    // 这种路径参数解析失败通常会导致 Axum 自动返回 400 Bad Request。
     let status = response.status();
-    assert!(
-        status == StatusCode::NOT_FOUND || status == StatusCode::BAD_REQUEST,
-        "预期删除无效UUID格式的帖子返回 404 或 400,实际为：{}",
-        status
-    );
+    assert_eq!(status, StatusCode::BAD_REQUEST, "预期删除无效UUID格式的帖子返回 400 Bad Request, 实际为：{}", status);
     Ok(())
 }
