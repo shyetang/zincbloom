@@ -1,7 +1,8 @@
+use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
 use crate::dtos::{PaginatedResponse, Pagination};
-use crate::models::{CreatePostPayload, Post, UpdatePostPayload};
+use crate::models::Post;
 use crate::repositories::PostRepository;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use slug::slugify;
 use std::sync::Arc;
 use uuid::Uuid;

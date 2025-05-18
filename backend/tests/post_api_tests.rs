@@ -1,15 +1,14 @@
 use anyhow::{Context, Result};
 
 use axum::{
-    Router,
     body::Body,
     http::{Request, StatusCode},
+    Router,
 };
 
 use tower::ServiceExt;
 
-use blog_backend::{
-    dtos::PaginatedResponse,
+use backend::{
     handlers::AppState,
     models::Post,
     repositories::{PostRepository, PostgresPostRepository},
@@ -23,11 +22,16 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use blog_backend::models::{CreatePostPayload, UpdatePostPayload};
 use http_body_util::BodyExt;
 
+use backend::dtos::{CreatePostPayload, PaginatedResponse, UpdatePostPayload};
+use backend::repositories::{
+    CategoryRepository, PostgresCategoryRepository, PostgresTagRepository, TagRepository,
+};
+use backend::services::{CategoryService, TagService};
 use std::sync::Once;
-use tracing_subscriber::EnvFilter; // 导入 EnvFilter
+use tracing_subscriber::EnvFilter;
+// 导入 EnvFilter
 
 static TRACING_INIT_TEST: Once = Once::new();
 // use hyper::body;
@@ -44,8 +48,20 @@ async fn setup_test_app(pool: PgPool) -> Router {
     let post_repo_trait: Arc<dyn PostRepository> = post_repo;
     let post_service = Arc::new(PostService::new(post_repo_trait));
 
+    let category_repo = Arc::new(PostgresCategoryRepository::new(pool.clone()));
+    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
+    let category_service = Arc::new(CategoryService::new(category_repo_trait));
+
+    let tag_repo = Arc::new(PostgresTagRepository::new(pool.clone()));
+    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
+    let tag_service = Arc::new(TagService::new(tag_repo_trait));
+
     // 2. 创建应用状态
-    let app_state = AppState { post_service };
+    let app_state = AppState {
+        post_service,
+        category_service,
+        tag_service,
+    };
 
     // 3. 创建Router
     create_router(app_state)
@@ -843,13 +859,8 @@ async fn test_delete_post_invalid_uuid_format(pool: PgPool) -> Result<()> {
     // 断言状态码
     // delete_post_handler 的 Path(id) 参数类型是 Path<Uuid>，
     // Axum 的路径提取器在解析 "this-is-not-a-uuid" 到 Uuid 时会失败。
-    // 这种路径参数解析失败通常会导致 Axum 自动返回 404 Not Found 或有时是 400 Bad Request。
-    // 让我们先预期 404，如果实际是 400 也可以接受。
+    // 这种路径参数解析失败通常会导致 Axum 自动返回 400 Bad Request。
     let status = response.status();
-    assert!(
-        status == StatusCode::NOT_FOUND || status == StatusCode::BAD_REQUEST,
-        "预期删除无效UUID格式的帖子返回 404 或 400,实际为：{}",
-        status
-    );
+    assert_eq!(status, StatusCode::BAD_REQUEST, "预期删除无效UUID格式的帖子返回 400 Bad Request, 实际为：{}", status);
     Ok(())
 }

@@ -1,6 +1,5 @@
 # Rust / Cargo
-/target
-backend/target/
+target
 #backend/Cargo.lock  # 对于应用项目，通常建议提交 Cargo.lock；如果是库项目，则忽略
 
 # IDE / Editor specific

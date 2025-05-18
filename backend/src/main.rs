@@ -1,14 +1,17 @@
 use anyhow::{Context, Result};
-use blog_backend::config::AppConfig;
-use blog_backend::handlers::AppState;
-use blog_backend::repositories::{PostRepository, PostgresPostRepository};
-use blog_backend::routes::create_router;
-use blog_backend::services::PostService;
+use backend::config::AppConfig;
+use backend::handlers::AppState;
+use backend::repositories::{
+    CategoryRepository, PostRepository, PostgresCategoryRepository, PostgresPostRepository,
+    PostgresTagRepository, TagRepository,
+};
+use backend::routes::create_router;
+use backend::services::{CategoryService, PostService, TagService};
 use sqlx::PgPool;
 use std::sync::Arc;
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,17 +31,34 @@ async fn main() -> Result<()> {
     tracing::info!("数据库连接池已连接。");
 
     // (可选) 运行数据库迁移
-    /*sqlx::migrate!("./migrations")
+    sqlx::migrate!("./migrations")
         .run(&db_pool)
         .await
         .context("运行数据库迁移失败")?;
-    tracing::info!("数据库迁移已应用。");*/
+    tracing::info!("数据库迁移已应用。");
 
     //  -- 依赖注入 --
+    //  -- 创建 PostService 实例 ---
     let post_repo = Arc::new(PostgresPostRepository::new(db_pool.clone()));
     let post_repo_trait: Arc<dyn PostRepository> = post_repo;
     let post_service = Arc::new(PostService::new(post_repo_trait));
-    let app_state = AppState { post_service };
+
+    //  -- 创建 CategoryService 实例 ---
+    let category_repo = Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
+    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
+    let category_service = Arc::new(CategoryService::new(category_repo_trait));
+
+    // -- 创建 TagService 实例 ----
+    let tag_repo = Arc::new(PostgresTagRepository::new(db_pool.clone()));
+    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
+    let tag_service = Arc::new(TagService::new(tag_repo_trait));
+
+    // 创建 AppState
+    let app_state = AppState {
+        post_service,
+        category_service,
+        tag_service,
+    };
 
     // 创建 Axum 路由
     let app = create_router(app_state);

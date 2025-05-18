@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+pub mod category;
+pub mod post;
+pub mod tag;
+
+pub use category::{CreateCategoryPayload, UpdateCategoryPayload};
+pub use post::{CreatePostPayload, UpdatePostPayload};
+pub use tag::{CreateTagPayload, UpdateTagPayload};
+
 // 用于接收分页查询参数的结构体
 #[derive(Debug, Deserialize)]
 pub struct Pagination {
