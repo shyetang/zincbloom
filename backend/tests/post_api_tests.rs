@@ -305,6 +305,8 @@ async fn test_create_post_valid_payload(pool: PgPool) -> Result<()> {
     let payload = CreatePostPayload {
         title: "新帖子标题".to_string(),
         content: "这是新帖子的内容。".to_string(),
+        category_ids: None,
+        tag_ids: None
     };
 
     let request = Request::builder()
@@ -363,6 +365,8 @@ async fn test_create_post_empty_title(pool: PgPool) -> Result<()> {
     let payload = CreatePostPayload {
         title: "".to_string(),
         content: "一些内容。".to_string(),
+        category_ids: None,
+        tag_ids: None
     };
 
     let request = Request::builder()
@@ -393,6 +397,8 @@ async fn test_create_post_slug_conflict(pool: PgPool) -> Result<()> {
     let payload_conflict = CreatePostPayload {
         title: title.to_string(),
         content: "不同的内容，但标题相同".to_string(),
+        category_ids: None,
+        tag_ids: None,
     };
 
     let request_conflict = Request::builder()
@@ -561,6 +567,8 @@ async fn test_update_post_full_success(pool: PgPool) -> Result<()> {
         slug: None,
         published_at: Some(now_for_publish), // 显示发布
         unpublish: false,                    // 明确不是撤稿 (或者依赖默认值)
+        category_ids: None,
+        tag_ids: None,
     };
 
     let request_uri = format!("/posts/{}", original_post.id);
@@ -628,6 +636,8 @@ async fn test_update_post_partial_title_only(pool: PgPool) -> Result<()> {
         slug: None,         // 不显式更新 slug
         published_at: None, // 不改变发布状态
         unpublish: false,   // 明确不是撤稿 (或者依赖默认值)
+        category_ids: None,
+        tag_ids: None
     };
 
     let request_uri = format!("/posts/{}", original_post.id);
@@ -677,6 +687,8 @@ async fn test_update_post_unpublish(pool: PgPool) -> Result<()> {
         slug: None,
         published_at: None, // 显式设置为 null，即撤稿
         unpublish: true,    // 明确不是撤稿 (或者依赖默认值)
+        category_ids: None,
+        tag_ids: None,
     };
 
     let request_uri = format!("/posts/{}", original_post.id);
@@ -741,6 +753,8 @@ async fn test_update_post_invalid_payload_empty_title(pool: PgPool) -> Result<()
         slug: None,
         published_at: None,
         unpublish: false, // 明确不是撤稿 (或者依赖默认值)
+        category_ids: None,
+        tag_ids: None
     };
 
     let request_uri = format!("/posts/{}", original_post.id);
