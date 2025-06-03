@@ -18,8 +18,8 @@ pub async fn create_post_handler(
     Json(payload): Json<CreatePostPayload>, // 从请求体解析 JSON
 ) -> Result<impl IntoResponse, ApiError> {
     // 返回 Result<impl IntoResponse, ApiError>
-    let post = state.post_service.create_post(payload).await?; //调用服务层方法
-    Ok((StatusCode::CREATED, Json(post))) // 成功返回 201 CREATED 和 JSON 数据
+    let post_detail = state.post_service.create_post(payload).await?; //调用服务层方法
+    Ok((StatusCode::CREATED, Json(post_detail))) // 成功返回 201 CREATED 和 JSON 数据
 }
 
 // 获取文章列表处理器
@@ -38,11 +38,11 @@ pub async fn get_post_handler(
     Path(id_or_slug): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // 尝试解析为UUID
-    let post = match Uuid::parse_str(&id_or_slug) {
+    let post_detail = match Uuid::parse_str(&id_or_slug) {
         Ok(id) => state.post_service.get_post_by_id(id).await?,
         Err(_) => state.post_service.get_post_by_slug(&id_or_slug).await?,
     };
-    Ok(Json(post))
+    Ok(Json(post_detail))
 }
 
 // 更新文章处理器
@@ -51,8 +51,8 @@ pub async fn update_post_handler(
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdatePostPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let update_post = state.post_service.update_post(id, payload).await?;
-    Ok(Json(update_post))
+    let update_post_detail = state.post_service.update_post(id, payload).await?;
+    Ok(Json(update_post_detail))
 }
 
 // 删除文章处理器

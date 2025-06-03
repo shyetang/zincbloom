@@ -38,20 +38,24 @@ async fn main() -> Result<()> {
     tracing::info!("数据库迁移已应用。");
 
     //  -- 依赖注入 --
-    //  -- 创建 PostService 实例 ---
-    let post_repo = Arc::new(PostgresPostRepository::new(db_pool.clone()));
-    let post_repo_trait: Arc<dyn PostRepository> = post_repo;
-    let post_service = Arc::new(PostService::new(post_repo_trait));
-
     //  -- 创建 CategoryService 实例 ---
     let category_repo = Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
     let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
-    let category_service = Arc::new(CategoryService::new(category_repo_trait));
+    let category_service = Arc::new(CategoryService::new(category_repo_trait.clone()));
 
     // -- 创建 TagService 实例 ----
     let tag_repo = Arc::new(PostgresTagRepository::new(db_pool.clone()));
     let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
-    let tag_service = Arc::new(TagService::new(tag_repo_trait));
+    let tag_service = Arc::new(TagService::new(tag_repo_trait.clone()));
+
+    //  -- 创建 PostService 实例 ---
+    let post_repo = Arc::new(PostgresPostRepository::new(db_pool.clone()));
+    let post_repo_trait: Arc<dyn PostRepository> = post_repo;
+    let post_service = Arc::new(PostService::new(
+        post_repo_trait.clone(),
+        category_repo_trait.clone(),
+        tag_repo_trait.clone(),
+    ));
 
     // 创建 AppState
     let app_state = AppState {

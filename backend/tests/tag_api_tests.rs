@@ -9,8 +9,12 @@ use backend::{
     handlers::AppState,
     models::Tag, // Tag model
     repositories::{
-        CategoryRepository, PostRepository, PostgresCategoryRepository, PostgresPostRepository,
-        PostgresTagRepository, TagRepository, // Tag repository
+        CategoryRepository,
+        PostRepository,
+        PostgresCategoryRepository,
+        PostgresPostRepository,
+        PostgresTagRepository,
+        TagRepository, // Tag repository
     },
     routes::create_router,
     services::{CategoryService, PostService, TagService}, // Tag service
@@ -52,17 +56,20 @@ async fn setup_test_app_for_tags(pool: PgPool) -> Router {
     ensure_tracing_is_initialized_for_test();
 
     // 1. 创建依赖实例
-    let post_repo: Arc<dyn PostRepository> =
-        Arc::new(PostgresPostRepository::new(pool.clone()));
-    let post_service = Arc::new(PostService::new(post_repo));
 
     let category_repo: Arc<dyn CategoryRepository> =
         Arc::new(PostgresCategoryRepository::new(pool.clone()));
-    let category_service = Arc::new(CategoryService::new(category_repo));
+    let category_service = Arc::new(CategoryService::new(category_repo.clone()));
 
     let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(pool.clone())); // 新增 TagRepository
-    let tag_service = Arc::new(TagService::new(tag_repo)); // 新增 TagService
+    let tag_service = Arc::new(TagService::new(tag_repo.clone())); // 新增 TagService
 
+    let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(pool.clone()));
+    let post_service = Arc::new(PostService::new(
+        post_repo.clone(),
+        category_repo.clone(),
+        tag_repo.clone(),
+    ));
     // 2. 创建应用状态
     let app_state = AppState {
         post_service,
@@ -88,9 +95,9 @@ async fn seed_one_tag(pool: &PgPool, name: &str) -> Result<Tag> {
         name,
         slug
     )
-        .fetch_one(pool)
-        .await
-        .context(format!("Seeding tag '{}' failed", name))?;
+    .fetch_one(pool)
+    .await
+    .context(format!("Seeding tag '{}' failed", name))?;
     Ok(tag)
 }
 
@@ -127,8 +134,8 @@ async fn test_create_tag_valid_payload(pool: PgPool) -> Result<()> {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
-    let created_tag: Tag = serde_json::from_slice(&body_bytes)
-        .context("无法将响应体反序列化为 Tag")?;
+    let created_tag: Tag =
+        serde_json::from_slice(&body_bytes).context("无法将响应体反序列化为 Tag")?;
 
     assert_eq!(created_tag.name, payload.name);
     assert!(!created_tag.slug.is_empty());
@@ -166,10 +173,12 @@ async fn test_create_tag_empty_name(pool: PgPool) -> Result<()> {
     let status = response.status();
     assert!(
         status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::BAD_REQUEST,
-        "预期空名称返回错误状态码 (当前可能是500，理想是400/422), 实际为: {}", status
+        "预期空名称返回错误状态码 (当前可能是500，理想是400/422), 实际为: {}",
+        status
     );
 
-    if status != StatusCode::INTERNAL_SERVER_ERROR { // 如果不是500，则检查错误消息
+    if status != StatusCode::INTERNAL_SERVER_ERROR {
+        // 如果不是500，则检查错误消息
         let body_bytes = response.into_body().collect().await?.to_bytes();
         let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
         let error_msg = error_response["error"].as_str().unwrap_or("");
@@ -211,7 +220,8 @@ async fn test_create_tag_name_conflict(pool: PgPool) -> Result<()> {
     let error_msg = error_response["error"].as_str().unwrap_or("");
     assert!(
         error_msg.contains("记录已存在") || error_msg.contains("唯一性冲突"),
-        "错误消息应指明唯一约束冲突，实际: '{}'", error_msg
+        "错误消息应指明唯一约束冲突，实际: '{}'",
+        error_msg
     );
 
     Ok(())
@@ -245,7 +255,6 @@ async fn test_list_tags_multiple(pool: PgPool) -> Result<()> {
     // 按名称排序，因为 list API 默认按名称升序
     seeded_tags.sort_by_key(|t| t.name.clone());
 
-
     let request = Request::builder()
         .method(Method::GET)
         .uri("/tags")
@@ -265,7 +274,6 @@ async fn test_list_tags_multiple(pool: PgPool) -> Result<()> {
     }
     Ok(())
 }
-
 
 // --- 测试 GET /tags/{identifier} (获取单个标签) ---
 #[sqlx::test]
@@ -338,7 +346,6 @@ async fn test_get_tag_by_slug_not_found(pool: PgPool) -> Result<()> {
     Ok(())
 }
 
-
 // --- 测试 PUT /tags/{id} (更新标签) ---
 #[sqlx::test]
 async fn test_update_tag_success(pool: PgPool) -> Result<()> {
@@ -397,12 +404,18 @@ async fn test_update_tag_empty_name(pool: PgPool) -> Result<()> {
     let status = response.status();
     assert!(
         status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::BAD_REQUEST,
-        "预期空名称更新返回错误状态码, 实际为: {}", status
+        "预期空名称更新返回错误状态码, 实际为: {}",
+        status
     );
     if status != StatusCode::INTERNAL_SERVER_ERROR {
         let body_bytes = response.into_body().collect().await?.to_bytes();
         let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-        assert!(error_response["error"].as_str().unwrap_or("").contains("标签名称不能为空"));
+        assert!(
+            error_response["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("标签名称不能为空")
+        );
     }
     Ok(())
 }
@@ -425,7 +438,11 @@ async fn test_update_tag_name_conflict(pool: PgPool) -> Result<()> {
         .body(Body::from(serde_json::to_vec(&payload)?))?;
 
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST, "预期名称冲突时更新返回 BAD_REQUEST");
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "预期名称冲突时更新返回 BAD_REQUEST"
+    );
     Ok(())
 }
 
@@ -450,7 +467,6 @@ async fn test_update_tag_not_found(pool: PgPool) -> Result<()> {
     Ok(())
 }
 
-
 // --- 测试 DELETE /tags/{id} (删除标签) ---
 #[sqlx::test]
 async fn test_delete_tag_success(pool: PgPool) -> Result<()> {
@@ -467,9 +483,10 @@ async fn test_delete_tag_success(pool: PgPool) -> Result<()> {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     // 验证数据库中标签确实已被删除
-    let deleted_tag_in_db = sqlx::query_as!(Tag, "SELECT * FROM tags WHERE id = $1", tag_to_delete.id)
-        .fetch_optional(&pool)
-        .await?;
+    let deleted_tag_in_db =
+        sqlx::query_as!(Tag, "SELECT * FROM tags WHERE id = $1", tag_to_delete.id)
+            .fetch_optional(&pool)
+            .await?;
     assert!(deleted_tag_in_db.is_none(), "标签在数据库中应该已被删除");
 
     Ok(())
@@ -506,7 +523,11 @@ async fn test_delete_tag_invalid_uuid_format(pool: PgPool) -> Result<()> {
 
     let response = app.oneshot(request).await?;
     // Axum 的 Path<Uuid> 提取器在解析失败时会返回 404 (有些版本或配置可能返回 400)
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST, "预期删除无效UUID格式返回 400 Bad Request");
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "预期删除无效UUID格式返回 400 Bad Request"
+    );
 
     Ok(())
 }
