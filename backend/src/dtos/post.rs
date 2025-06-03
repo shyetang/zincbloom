@@ -1,7 +1,7 @@
+use crate::models::{Category, Tag};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::models::{Category, Tag};
 
 /// 用于创建新文章的数据结构（DTO - Data Transfer Object）
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,8 +33,8 @@ pub struct UpdatePostPayload {
 }
 
 /// 用于在获取单个帖子详情时，同时返回帖子的基本信息及其关联的分类和标签信息
-#[derive(Debug,Serialize,Deserialize,Clone)]
-pub struct PostDetailDto{
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PostDetailDto {
     // Post 模型中的字段
     pub id: Uuid,
     pub slug: String,
@@ -44,19 +44,20 @@ pub struct PostDetailDto{
     pub updated_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>,
     // 关联的分类信息
-    
+    pub categories: Option<Vec<CategoryDto>>,
     // 关联的标签信息
+    pub tags: Option<Vec<TagDto>>,
 }
 
 /// 分类的简化 DTO,不想在 PostDetailDto 中暴露完整的 Category 模型
-#[derive(Debug,Serialize,Deserialize,Clone)]
-pub struct CategoryDto{
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CategoryDto {
     pub id: Uuid,
     pub name: String,
     pub slug: String,
 }
 
-impl From<Category> for CategoryDto{
+impl From<Category> for CategoryDto {
     fn from(category: Category) -> Self {
         Self {
             id: category.id,
@@ -67,14 +68,14 @@ impl From<Category> for CategoryDto{
 }
 
 /// 标签的简化 DTO
-#[derive(Debug,Serialize,Deserialize,Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TagDto {
     pub id: Uuid,
     pub name: String,
     pub slug: String,
 }
 
-impl From<Tag> for TagDto{
+impl From<Tag> for TagDto {
     fn from(tag: Tag) -> Self {
         Self {
             id: tag.id,

@@ -1,5 +1,4 @@
 pub mod models;
-
 pub mod api_error;
 pub mod config;
 pub mod dtos;
