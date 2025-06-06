@@ -25,7 +25,7 @@ EXECUTE FUNCTION trigger_set_timestamp();
 
 -- 插入一些默认的角色定义
 -- 使用 gen_random_uuid() (PostgreSQL 13+功能) 或 uuid_generate_v4() (需开启 uuid-ossp 扩展) 来生成UUID
--- 这里使用 gen_random_uuid() 作为示例
+-- 这里使用 gen_random_uuid()
 INSERT INTO roles (id, name, description)
 VALUES (gen_random_uuid(), 'admin', '系统管理员，拥有所有权限'),
        (gen_random_uuid(), 'editor', '编辑人员，可以管理所有内容和分类标签'),
