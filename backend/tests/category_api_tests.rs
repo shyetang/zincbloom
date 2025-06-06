@@ -17,7 +17,7 @@ use backend::{
         TagRepository,
     },
     routes::create_router,
-    services::{CategoryService, PostService, TagService}, // Category service
+    services::{AuthSerVice, CategoryService, PostService, TagService}, // Category service
 };
 use http_body_util::BodyExt;
 use slug::slugify;
@@ -57,26 +57,59 @@ fn ensure_tracing_is_initialized_for_test() {
 async fn setup_test_app_for_categories(pool: PgPool) -> Router {
     ensure_tracing_is_initialized_for_test();
 
+    // 为测试手动创建一个 AppConfig 实例
+    // 不从 .env 加载，以保证测试的独立性和确定性。
+    let test_config = backend::config::AppConfig {
+        database: backend::config::DatabaseConfig {
+            url: "placeholder".to_string(), // 在测试中未使用，因为 PgPool 是直接注入的
+        },
+        server: backend::config::ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+        },
+        auth: backend::config::AuthConfig {
+            jwt_secret: "a_very_long_and_secure_secret_for_testing_only".to_string(),
+            jwt_issuer: "test-issuer".to_string(),
+            jwt_audience: "test-audience".to_string(),
+            jwt_expiry_hours: 1,
+        },
+    };
+
+    // 实例化所有 Repositories
     let category_repo: Arc<dyn CategoryRepository> =
         Arc::new(PostgresCategoryRepository::new(pool.clone()));
-    let category_service = Arc::new(CategoryService::new(category_repo.clone()));
-
     let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(pool.clone()));
-    let tag_service = Arc::new(TagService::new(tag_repo.clone()));
-
     let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(pool.clone()));
+    let user_repo: Arc<dyn backend::repositories::UserRepository> = Arc::new(
+        backend::repositories::PostgresUserRepository::new(pool.clone()),
+    );
+    let role_repo: Arc<dyn backend::repositories::RoleRepository> = Arc::new(
+        backend::repositories::PostgresRoleRepository::new(pool.clone()),
+    );
+
+    // 实例化所有 Services
+    let auth_service = Arc::new(AuthSerVice::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        &test_config,
+    ));
+    let category_service = Arc::new(CategoryService::new(category_repo.clone()));
+    let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let post_service = Arc::new(PostService::new(
-        post_repo,
+        post_repo.clone(),
         category_repo.clone(),
         tag_repo.clone(),
     ));
 
+    // 创建更新后的 AppState
     let app_state = AppState {
         post_service,
         category_service,
         tag_service,
+        auth_service, // 包含 auth_service
     };
 
+    // 创建 Router
     create_router(app_state)
 }
 
