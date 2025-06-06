@@ -1,12 +1,18 @@
-use crate::handlers::{create_category_handler, create_post_handler, create_tag_handler, delete_category_handler, delete_post_handler, delete_tag_handler, get_category_handler, get_post_handler, get_tag_handler, list_categories_handler, list_posts_handler, list_tags_handler, login_handler, register_handler, update_category_handler, update_post_handler, update_tag_handler, AppState};
+use crate::handlers::{
+    create_category_handler, create_post_handler, create_tag_handler, delete_category_handler,
+    delete_post_handler, delete_tag_handler, get_category_handler, get_post_handler,
+    get_tag_handler, list_categories_handler, list_posts_handler, list_tags_handler,
+    login_handler, register_handler, update_category_handler, update_post_handler,
+    update_tag_handler, AppState,
+};
 use axum::routing::{get, post};
 use axum::Router;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
         // -- Auth 相关路由 --
-        .route("/auth/register",post(register_handler))
-        .route("/auth/login",post(login_handler))
+        .route("/auth/register", post(register_handler))
+        .route("/auth/login", post(login_handler))
         // -- Post 相关路由 --
         // POST /posts -> 创建帖子
         // GET  /posts -> 获取帖子列表

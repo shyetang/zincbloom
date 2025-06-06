@@ -52,9 +52,9 @@ impl PostService {
 
     // 创建帖子，并返回包含完整关联信息的 PostDetailDto
     pub async fn create_post(
-        &self, 
+        &self,
         author_id: Uuid,
-        payload: CreatePostPayload
+        payload: CreatePostPayload,
     ) -> Result<PostDetailDto> {
         if payload.title.trim().is_empty() {
             // 使用 anyhow！ 宏创建错误
@@ -77,7 +77,7 @@ impl PostService {
         // 调用仓库，repo.create 返回基本的 Post 对象，它已经处理了关联表的写入
         let created_post_basic = self
             .repo
-            .create(author_id,&payload, &slug)
+            .create(author_id, &payload, &slug)
             .await
             .context("Service未能创建帖子基本信息及关联")?;
 

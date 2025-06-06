@@ -1,10 +1,10 @@
+use crate::dtos::category::{CreateCategoryPayload, UpdateCategoryPayload};
 use crate::models::Category;
 use crate::repositories::CategoryRepository;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use slug::slugify;
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::dtos::category::{CreateCategoryPayload, UpdateCategoryPayload};
 
 #[derive(Clone)] // 需要Clone，以便在 AppState 中共享
 pub struct CategoryService {

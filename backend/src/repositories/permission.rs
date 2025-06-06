@@ -37,10 +37,10 @@ impl PermissionRepository for PostgresPermissionRepository {
             name,
             description
         )
-            .fetch_one(&self.pool)
-            .await
-            .context(format!("创建权限 {} 失败",name))?;
-        
+        .fetch_one(&self.pool)
+        .await
+        .context(format!("创建权限 {} 失败", name))?;
+
         Ok(permission)
     }
 
@@ -53,10 +53,10 @@ impl PermissionRepository for PostgresPermissionRepository {
             order by name
             "#
         )
-            .fetch_all(&self.pool)
-            .await
-            .context("获取权限列表失败")?;
-        
+        .fetch_all(&self.pool)
+        .await
+        .context("获取权限列表失败")?;
+
         Ok(permissions)
     }
 }

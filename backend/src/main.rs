@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use backend::config::AppConfig;
 use backend::handlers::AppState;
-use backend::repositories::{CategoryRepository, PermissionRepository, PostRepository, PostgresCategoryRepository, PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository};
+use backend::repositories::{
+    CategoryRepository, PermissionRepository, PostRepository, PostgresCategoryRepository,
+    PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository,
+    PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository,
+};
 use backend::routes::create_router;
 use backend::services::{AuthSerVice, CategoryService, PostService, TagService};
 use sqlx::PgPool;
@@ -36,13 +40,14 @@ async fn main() -> Result<()> {
 
     //  -- 依赖注入 --
     //  -- 实例化所有的Repository ---
-    let category_repo:Arc<dyn CategoryRepository> = Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
-    let tag_repo:Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(db_pool.clone()));
-    let post_repo:Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(db_pool.clone()));
+    let category_repo: Arc<dyn CategoryRepository> =
+        Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
+    let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(db_pool.clone()));
+    let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(db_pool.clone()));
     let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(db_pool.clone()));
     let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(db_pool.clone()));
-    let _permission_repo: Arc<dyn PermissionRepository> = Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
-    
+    let _permission_repo: Arc<dyn PermissionRepository> =
+        Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
 
     // -- 实例化所有的 Services ----
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
@@ -50,7 +55,7 @@ async fn main() -> Result<()> {
     let auth_service = Arc::new(AuthSerVice::new(
         user_repo.clone(),
         role_repo.clone(),
-        &config
+        &config,
     ));
 
     //  -- 创建 PostService 实例 ---
@@ -65,7 +70,7 @@ async fn main() -> Result<()> {
         post_service,
         category_service,
         tag_service,
-        auth_service
+        auth_service,
     };
 
     // 创建 Axum 路由

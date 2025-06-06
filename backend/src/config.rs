@@ -41,12 +41,12 @@ impl AppConfig {
             // 为认证配置添加默认值
             // !! 警告: 这里的 jwt_secret 只是一个占位符，绝对不能在生产环境中使用 !!
             // !! 必须通过环境变量 (APP_AUTH__JWT_SECRET) 来覆盖它 !!
-            .set_default("auth.jwt_secret","default_secret_that_must_be_changed")?
+            .set_default("auth.jwt_secret", "default_secret_that_must_be_changed")?
             .set_default("auth.jwt_issuer", "my_blog_app")?
             .set_default("auth.jwt_audience", "my_blog_app_users")?
             .set_default("auth.jwt_expiry_hours", 24)?
             // .set_default(...)? // 其他默认值
-            
+
             // 从环境变量加载配置
             // 前缀为 "APP"，分隔符为 "__"
             // 例如: APP_SERVER__PORT=9000 会覆盖 server.port

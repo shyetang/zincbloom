@@ -1,20 +1,23 @@
-use axum::{extract::{State,Json}, http::StatusCode};
-use anyhow::Result;
-use axum::response::{IntoResponse};
-use serde_json::json;
 use crate::api_error::ApiError;
 use crate::handlers::AppState;
 use crate::models::{UserLoginPayload, UserRegistrationPayload};
+use anyhow::Result;
+use axum::response::IntoResponse;
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+};
+use serde_json::json;
 
 /// 用户注册处理器
 pub async fn register_handler(
     State(state): State<AppState>,
     Json(payload): Json<UserRegistrationPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    tracing::info!("接收到用户注册请求：{}",payload.username);
+    tracing::info!("接收到用户注册请求：{}", payload.username);
     let user_public = state.auth_service.register_user(payload).await?;
-    
-    Ok((StatusCode::CREATED,Json(user_public)))
+
+    Ok((StatusCode::CREATED, Json(user_public)))
 }
 
 /// 用户登录处理器

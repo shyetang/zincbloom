@@ -15,4 +15,3 @@ pub struct Post {
     pub published_at: Option<DateTime<Utc>>, // 使用Option表示文章可能为草稿状态
     pub author_id: Option<Uuid>,
 }
-

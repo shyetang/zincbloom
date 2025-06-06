@@ -70,9 +70,9 @@ impl CategoryRepository for PostgresCategoryRepository {
             name,
             slug
         )
-            .fetch_one(&self.pool)
-            .await
-            .context("创建 Category 记录失败 (INSERT)")?;
+        .fetch_one(&self.pool)
+        .await
+        .context("创建 Category 记录失败 (INSERT)")?;
 
         Ok(category)
     }
@@ -87,9 +87,9 @@ impl CategoryRepository for PostgresCategoryRepository {
             "#,
             id
         )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("通过 ID ({}) 查询 Category 失败", id))?;
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("通过 ID ({}) 查询 Category 失败", id))?;
 
         Ok(category)
     }
@@ -104,9 +104,9 @@ impl CategoryRepository for PostgresCategoryRepository {
             "#,
             slug
         )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("通过Slug ({}) 查询 Category 失败", slug))?;
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("通过Slug ({}) 查询 Category 失败", slug))?;
 
         Ok(category)
     }
@@ -117,12 +117,12 @@ impl CategoryRepository for PostgresCategoryRepository {
             r#"
             select id,name,slug,created_at,updated_at
             from categories
-            order by name ASC  -- 按名称字幕顺序排序
+            order by name  -- 按名称字幕顺序排序
             "#
         )
-            .fetch_all(&self.pool)
-            .await
-            .context("查询 Category 列表失败")?;
+        .fetch_all(&self.pool)
+        .await
+        .context("查询 Category 列表失败")?;
 
         Ok(categories)
     }
@@ -164,9 +164,9 @@ impl CategoryRepository for PostgresCategoryRepository {
             current_category.slug,
             id
         )
-            .fetch_one(&self.pool)
-            .await
-            .context(format!("数据库层面更新 Category (ID: {}) 失败", id))?;
+        .fetch_one(&self.pool)
+        .await
+        .context(format!("数据库层面更新 Category (ID: {}) 失败", id))?;
 
         Ok(updated_category)
     }

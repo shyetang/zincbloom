@@ -1,7 +1,7 @@
 use anyhow::Error as AnyhowError;
-use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use config::ConfigError;
 use serde_json::json;
 use std::error::Error as StdError;
@@ -27,7 +27,7 @@ fn error_chain_contains(error: &AnyhowError, keyword: &str) -> bool {
 }
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        // 1. 首先记录详细的错误链，便于服务器端调试
+        //  首先记录详细的错误链，便于服务器端调试
         //    self.0 是 anyhow::Error，它的 Debug 实现会包含错误链和上下文
         // 使用anyhow的{:?}的格式化
         tracing::error!("API层捕获到错误(debug): {:?}", self.0);
@@ -38,7 +38,27 @@ impl IntoResponse for ApiError {
             error_display_for_client
         );
 
-        // 2. 优先处理由 anyhow! 或 bail! 产生的应用层面 “未找到” 错误
+        // --- 专门处理认证和授权错误  ---
+        // 检查认证错误 (例如，无效/缺失 Token)，这类错误应该返回 401 Unauthorized
+        // 约定在认证相关错误中包含 "token" 或 "认证" 关键词
+        if error_chain_contains(&self.0, "token") || error_chain_contains(&self.0, "认证") {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": error_display_for_client })),
+            )
+                .into_response();
+        }
+        // 检查授权错误 (例如，权限不足)，这类错误应该返回 403 Forbidden
+        // 我们约定在授权相关错误中包含 "权限" 或 "permission" 关键词
+        if error_chain_contains(&self.0, "权限") || error_chain_contains(&self.0, "permission") {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": error_display_for_client })),
+            )
+                .into_response();
+        }
+
+        //  处理由 anyhow! 或 bail! 产生的应用层面 “未找到” 错误
         //    这些错误不是数据库层面的 RowNotFound,而是业务逻辑判断的结果
         // 使用辅助函数检查整个错误链
         if error_chain_contains(&self.0, "未找到") || error_chain_contains(&self.0, "not found")
@@ -53,7 +73,8 @@ impl IntoResponse for ApiError {
         }
         tracing::warn!("[DEBUG] Did NOT match '未找到'/'not found'. Proceeding."); // 调试日志
 
-        // 3. 尝试 downcast 到 sqlx::Error 来处理特定的数据库错误
+        // 处理特定数据库错误
+        //  尝试 downcast 到 sqlx::Error 来处理特定的数据库错误
         //    需要检查 self.0.source() 链条，因为 anyhow::Error 可能包装了多层
         let mut root_cause: Option<&(dyn StdError + 'static)> = Some(&*self.0); //&*self.0 获取对内部错误的引用
         while let Some(cause) = root_cause {
@@ -93,7 +114,8 @@ impl IntoResponse for ApiError {
             root_cause = cause.source(); // 继续查找 source 链
         }
 
-        // 4. 如果是其他类型的已知错误（例如配置错误，如果 ApiError 能包装它）
+        // 处理配置错误
+        // 如果是其他类型的已知错误（例如配置错误，如果 ApiError 能包装它）
         if let Some(_config_err) = self.0.downcast_ref::<ConfigError>() {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,

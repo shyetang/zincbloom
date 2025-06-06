@@ -116,7 +116,7 @@ impl RoleRepository for PostgresRoleRepository {
         .fetch_all(&self.pool)
         .await
         .context(format!("获取角色id {} 的所有权限失败", role_id))?;
-        
+
         Ok(permissions)
     }
 }

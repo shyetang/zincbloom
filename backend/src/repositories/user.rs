@@ -25,7 +25,7 @@ pub trait UserRepository: Send + Sync {
     // 从用户移除角色
     async fn remove_role_from_user(&self, user_id: Uuid, role_id: Uuid) -> Result<()>;
     // 设置用户的角色列表（先清空后添加）
-    async fn set_user_roles(&self,user_id: Uuid,role_ids: &[Uuid])->Result<()>;
+    async fn set_user_roles(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>;
     // 获取用户拥有的所有角色
     async fn get_user_roles(&self, user_id: Uuid) -> Result<Vec<Role>>;
     // 获取用户拥有的所有权限(通过其角色间接获得）
@@ -124,7 +124,7 @@ impl UserRepository for PostgresUserRepository {
     }
 
     async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
-        if role_ids.is_empty() { 
+        if role_ids.is_empty() {
             return Ok(());
         }
         sqlx::query!(
@@ -137,10 +137,7 @@ impl UserRepository for PostgresUserRepository {
         )
         .execute(&self.pool)
         .await
-        .context(format!(
-            "给用户id {} 分配角色失败",
-            user_id
-        ))?;
+        .context(format!("给用户id {} 分配角色失败", user_id))?;
         Ok(())
     }
 
@@ -161,16 +158,13 @@ impl UserRepository for PostgresUserRepository {
         // 在单个事务中执行“先删除后添加”的操作，确保原子性
         let mut tx = self.pool.begin().await.context("开启数据库事务失败")?;
         // 1. 删除该用户所有已存在的角色
-        sqlx::query!(
-            "delete from user_roles where user_id = $1",
-            user_id
-        )
+        sqlx::query!("delete from user_roles where user_id = $1", user_id)
             .execute(&mut *tx)
             .await
             .context("删除用户旧角色失败")?;
-        
+
         // 2. 如果提供了新的角色id列表，则批量插入新的角色
-        if !role_ids.is_empty() { 
+        if !role_ids.is_empty() {
             sqlx::query!(
                 r#"
                 insert into user_roles (user_id, role_id) 
@@ -179,14 +173,14 @@ impl UserRepository for PostgresUserRepository {
                 user_id,
                 role_ids
             )
-                .execute(&mut *tx)
-                .await
-                .context("插入新用户角色失败")?;
+            .execute(&mut *tx)
+            .await
+            .context("插入新用户角色失败")?;
         }
-        
+
         // 3 提交事务
         tx.commit().await.context("插入新角色失败")?;
-        
+
         Ok(())
     }
 

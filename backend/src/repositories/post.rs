@@ -10,7 +10,12 @@ use uuid::Uuid;
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     // Send + Sync 是因为要在async Axum中共享
-    async fn create(&self,author_id:Uuid, payload: &CreatePostPayload, slug: &str) -> Result<Post>;
+    async fn create(
+        &self,
+        author_id: Uuid,
+        payload: &CreatePostPayload,
+        slug: &str,
+    ) -> Result<Post>;
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Post>>;
     async fn get_by_slug(&self, slug: &str) -> Result<Option<Post>>;
     async fn list(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)>;
@@ -113,7 +118,12 @@ impl PostgresPostRepository {
 
 #[async_trait]
 impl PostRepository for PostgresPostRepository {
-    async fn create(&self,author_id:Uuid, payload: &CreatePostPayload, slug: &str) -> Result<Post> {
+    async fn create(
+        &self,
+        author_id: Uuid,
+        payload: &CreatePostPayload,
+        slug: &str,
+    ) -> Result<Post> {
         let post_id = Uuid::new_v4();
         let now = Utc::now();
 
