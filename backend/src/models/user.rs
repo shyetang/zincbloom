@@ -32,6 +32,7 @@ pub struct UserLoginPayload {
 }
 
 // 用于API响应的用户公开信息结构体，不包含密码等敏感数据
+#[derive(Debug,Serialize,Deserialize,Clone)]
 pub struct UserPublic {
     pub id: Uuid,
     pub username: String,
