@@ -55,19 +55,68 @@ pub async fn get_post_handler(
 
 // 更新文章处理器
 pub async fn update_post_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdatePostPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+    // 授权检查
+    // 检查用户是否有 修改任意帖子 的超级权限
+    let can_edit_any = auth_user.require_permission("post:edit_any").is_ok();
+    if can_edit_any {
+        // 如果有超级权限，直接执行修改
+        tracing::info!("用户 {} (管理员/编辑) 正在编辑帖子 {}", user_id, id);
+    } else {
+        // 如果没有超级权限，检查用户是否有编辑自己帖子的权限，并且是否是帖子的所有者
+        auth_user.require_permission("post:edit_own")?;
+
+        let post_author = state.post_service.get_post_author(id).await?;
+
+        if post_author != Some(user_id) {
+            // 如果帖子的作者不是当前用户，则禁止操作
+            tracing::warn!("权限不足：用户 {} 尝试编辑不属于自己的帖子 {}", user_id, id);
+            return Err(ApiError::from(anyhow::anyhow!("您只能编辑自己的帖子")));
+        }
+        tracing::info!("用户 {} 正在编辑自己的帖子 {}", user_id, id);
+    }
+
     let update_post_detail = state.post_service.update_post(id, payload).await?;
     Ok(Json(update_post_detail))
 }
 
 // 删除文章处理器
 pub async fn delete_post_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+    // 授权检查
+    // 检查用户是否有 删除任意帖子 的超级权限
+    let can_delete_any = auth_user.require_permission("post:delete_any").is_ok();
+    if can_delete_any {
+        // 如果有超级权限，直接执行删除
+        tracing::info!("用户 {} (管理员/编辑) 正在删除帖子 {}", user_id, id);
+    } else {
+        // 如果没有超级权限，检查用户是否有删除自己帖子的权限，并且是否是帖子所有者
+        auth_user.require_permission("post:delete_own")?;
+
+        let post_author = state.post_service.get_post_author(id).await?;
+
+        if post_author != Some(user_id) {
+            // 如果帖子的作者不是当前用户，则禁止操作
+            tracing::warn!(
+                "权限不足： 用户 {} 尝试删除不属于自己的帖子 {}",
+                user_id,
+                id
+            );
+            return Err(ApiError::from(anyhow::anyhow!("您只能删除自己的帖子")));
+        }
+        tracing::info!("用户 {} 正在删除自己的帖子 {}", user_id, id);
+    }
+    // 执行删除操作
+    // 无论是因为有超级权限还是因为是所有者，只要前面的授权检查通过，就执行删除
     state.post_service.delete_post(id).await?;
     Ok(StatusCode::NO_CONTENT) // 成功删除返回 204 NO CONTENT
 }

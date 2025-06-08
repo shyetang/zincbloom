@@ -36,6 +36,9 @@ pub trait PostRepository: Send + Sync {
     // 暂时不实现，但作为未来获取关联信息的占位
     // async fn get_category_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
     // async fn get_tag_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
+    
+    // 获取帖子的作者id
+    async fn get_author_id(&self,post_id: Uuid)->Result<Option<Uuid>>;
 }
 
 // Postgres的具体实现
@@ -393,5 +396,16 @@ impl PostRepository for PostgresPostRepository {
         .context(format!("Failed to fetch tags for post {}", post_id))?;
 
         Ok(tags)
+    }
+
+    async fn get_author_id(&self, post_id: Uuid) -> Result<Option<Uuid>> {
+        let result = sqlx::query!(
+            "select author_id from posts where id = $1",
+            post_id
+        )
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("从数据库获取 Post id 为 {} 的 author id失败",post_id))?;
+        Ok(result.and_then(|record| record.author_id))
     }
 }

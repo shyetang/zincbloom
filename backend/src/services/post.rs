@@ -316,4 +316,9 @@ impl PostService {
             .await
             .context(format!("Service未能删除帖子 (id: {})", id))
     }
+    
+    // 获取 post 的作者 id
+    pub async fn get_post_author(&self,post_id: Uuid) -> Result<Option<Uuid>> {
+        self.repo.get_author_id(post_id).await.context("Service层获取作者ID失败")
+    }
 }
