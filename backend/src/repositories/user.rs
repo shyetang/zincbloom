@@ -1,6 +1,7 @@
 use crate::models::{Permission, Role, User, UserRegistrationPayload};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -30,6 +31,17 @@ pub trait UserRepository: Send + Sync {
     async fn get_user_roles(&self, user_id: Uuid) -> Result<Vec<Role>>;
     // 获取用户拥有的所有权限(通过其角色间接获得）
     async fn get_user_permissions(&self, user_id: Uuid) -> Result<Vec<Permission>>;
+    // 存储 Refresh Token 哈希到数据库
+    async fn store_refresh_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<()>;
+    // 通过 Refresh Token 哈希查找关联的用户。如果 token 过期，则不返回任何内容
+    async fn find_user_by_refresh_token(&self, token_hash: &str) -> Result<Option<User>>;
+    // 删除指定的 Refresh Token 哈希
+    async fn delete_refresh_token(&self, token_hash: &str) -> Result<()>;
 }
 
 // UserRepository 的 PostgreSQL 具体实现
@@ -221,5 +233,59 @@ impl UserRepository for PostgresUserRepository {
         .context(format!("获取用户ID {} 的所有权限失败", user_id))?;
 
         Ok(permissions)
+    }
+
+    async fn store_refresh_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<()> {
+        sqlx::query!(
+            "insert into refresh_tokens (token_hash, user_id, expires_at) VALUES ($1,$2,$3)",
+            token_hash,
+            user_id,
+            expires_at
+        )
+        .execute(&self.pool)
+        .await
+        .context("存储用户刷新令牌失败")?;
+        
+        Ok(())
+    }
+
+    async fn find_user_by_refresh_token(&self, token_hash: &str) -> Result<Option<User>> {
+        // 查找用户,  并检查令牌是否过期
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            select u.id,u.username,u.email,u.hashed_password,u.created_at,u.updated_at
+            from users u
+            inner join refresh_tokens rt on u.id = rt.user_id
+            where rt.token_hash = $1 and rt.expires_at > now()
+            "#,
+            token_hash
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context("查找用户刷新令牌失败")?;
+        Ok(user)
+    }
+
+    async fn delete_refresh_token(&self, token_hash: &str) -> Result<()> {
+        let result = sqlx::query!(
+            "delete from refresh_tokens where token_hash = $1",
+            token_hash
+        )
+        .execute(&self.pool)
+        .await
+        .context("删除用户刷新令牌失败")?;
+
+        // 如果没有行被删除，可能意味着 token 已经被撤销或不存在，这通常不是一个需要向上传播的错误
+        if result.rows_affected() == 0 {
+            tracing::warn!("尝试删除一个不存在或已过期的 refresh token: {}", token_hash);
+        }
+        
+        Ok(())
     }
 }

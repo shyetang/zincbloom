@@ -8,9 +8,11 @@ use argon2::{
 };
 
 use crate::config::AppConfig;
-use crate::models::{UserLoginPayload, UserPublic, UserRegistrationPayload};
+use crate::models::{User, UserLoginPayload, UserPublic, UserRegistrationPayload};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing;
 
@@ -24,15 +26,22 @@ pub struct Claims {
     pub permissions: Vec<String>, // 用户拥有的权限名称列表
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LoginTokens {
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
 // 认证服务结构体
 #[derive(Clone)]
 pub struct AuthSerVice {
     user_repo: Arc<dyn UserRepository>,
     role_repo: Arc<dyn RoleRepository>, // 在注册时分配默认角色，需要 RoleRepository
-    jwt_secret: String,                 // 用于签名和验证 JWT 的密钥
+    access_token_secret: String,        // 用于签名和验证 token 的密钥
     jwt_issuer: String,                 // JWT 签发者
     jwt_audience: String,               // JWT 受众
-    jwt_expiry_hours: i64,              // JWT 过期时间 (小时)
+    access_token_expiry_minutes: i64,   // Access token 的有效期（分钟）
+    refresh_token_expiry_days: i64,     // Refresh token 的有效期（天）
 }
 
 // 密码哈希辅助函数(使用 argon2id)
@@ -74,6 +83,22 @@ fn verify_password(hash_str: &str, password: &str) -> Result<bool> {
     }
 }
 
+// 生成一个长而随机的字符串作为 Refresh Token
+fn generate_refresh_token() -> String {
+    rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(64) // 64位长度
+        .map(char::from)
+        .collect()
+}
+
+// 使用 blake3 对 Token 进行哈希，以便存入数据库
+fn hash_token(token: &str) -> String {
+    let hash = blake3::hash(token.as_bytes());
+    // to_hex() 返回一个特殊的 Hex an dDisplay 类型，将其转换为 String
+    hash.to_hex().to_string()
+}
+
 impl AuthSerVice {
     // 构造函数
     pub fn new(
@@ -81,14 +106,14 @@ impl AuthSerVice {
         role_repo: Arc<dyn RoleRepository>,
         config: &AppConfig,
     ) -> Self {
-        let auth_config = &config.auth;
         Self {
             user_repo,
             role_repo,
-            jwt_secret: auth_config.jwt_secret.clone(),
-            jwt_issuer: auth_config.jwt_issuer.clone(),
-            jwt_audience: auth_config.jwt_audience.clone(),
-            jwt_expiry_hours: auth_config.jwt_expiry_hours,
+            access_token_secret: config.auth.jwt_secret.clone(),
+            jwt_issuer: config.auth.jwt_issuer.clone(),
+            jwt_audience: config.auth.jwt_audience.clone(),
+            access_token_expiry_minutes: config.auth.access_token_expiry_minutes,
+            refresh_token_expiry_days: config.auth.refresh_token_expiry_days,
         }
     }
 
@@ -162,7 +187,7 @@ impl AuthSerVice {
         let permission_names: Vec<String> = permissions.into_iter().map(|p| p.name).collect();
 
         let expiration = Utc::now()
-            .checked_add_signed(Duration::hours(self.jwt_expiry_hours))
+            .checked_add_signed(Duration::hours(self.access_token_expiry_minutes))
             .expect("创建有效JWT过期时间戳失败")
             .timestamp();
 
@@ -178,7 +203,7 @@ impl AuthSerVice {
         let token = encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret(self.jwt_secret.as_ref()),
+            &EncodingKey::from_secret(self.access_token_secret.as_ref()),
         )
         .context("生成 JWT 失败")?;
 
@@ -193,6 +218,74 @@ impl AuthSerVice {
         Ok((token, user_public))
     }
 
+    // logout
+    pub async fn logout(&self, refresh_token: &str) -> Result<()> {
+        let token_hash = hash_token(refresh_token);
+        self.user_repo
+            .delete_refresh_token(&token_hash)
+            .await
+            .context("注销时删除 Refresh Token 失败")
+    }
+
+    pub async fn refresh_access_token(&self, refresh_token: &str) -> Result<LoginTokens> {
+        let token_hash = hash_token(refresh_token);
+
+        // 验证 Refresh Token 是否有效，并获取关联用户
+        let user = self
+            .user_repo
+            .find_user_by_refresh_token(&token_hash)
+            .await
+            .context("验证 Refresh Token 时发生数据库错误")?
+            .ok_or_else(|| anyhow!("无效的 Refresh Token"))?;
+
+        // 立即使当前 Refresh Token 失效
+        self.user_repo
+            .delete_refresh_token(&token_hash)
+            .await
+            .context("注销时删除 Refresh Token 失败")?;
+
+        // 为用户生成一套新的 Token
+        let tokens = self.generate_and_store_tokens(&user).await?;
+
+        tracing::info!("成功为用户 {} 刷新了 Token", user.username);
+        Ok(tokens)
+    }
+
+    // 生成 Token
+    async fn generate_and_store_tokens(&self, user: &User) -> Result<LoginTokens> {
+        // 生成 Access Token
+        let roles = self.user_repo.get_user_roles(user.id).await?;
+        let permissions = self.user_repo.get_user_permissions(user.id).await?;
+        let access_token_exp = Utc::now() + Duration::minutes(self.access_token_expiry_minutes);
+        let claims = Claims {
+            sub: user.id.to_string(),
+            username: user.username.clone(),
+            exp: access_token_exp.timestamp() as usize,
+            roles: roles.into_iter().map(|r| r.name).collect(),
+            permissions: permissions.into_iter().map(|p| p.name).collect(),
+        };
+        let access_token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.access_token_secret.as_ref()),
+        )
+        .context("生成 Access Token 失败")?;
+
+        // 生成 Refresh Token，并存储
+        let refresh_token = generate_refresh_token();
+        let refresh_token_hash = hash_token(&refresh_token);
+        let refresh_token_exp = Utc::now() + Duration::days(self.refresh_token_expiry_days);
+        self.user_repo
+            .store_refresh_token(user.id, &refresh_token_hash, refresh_token_exp)
+            .await
+            .context("存储 Refresh Token 时发生数据库错误")?;
+
+        Ok(LoginTokens {
+            access_token,
+            refresh_token,
+        })
+    }
+
     // 验证 Token
     pub fn validate_token(&self, token: &str) -> Result<TokenData<Claims>> {
         let mut validation = Validation::default();
@@ -201,7 +294,7 @@ impl AuthSerVice {
 
         decode::<Claims>(
             token,
-            &DecodingKey::from_secret(self.jwt_secret.as_ref()),
+            &DecodingKey::from_secret(self.access_token_secret.as_ref()),
             &validation,
         )
         .map_err(|e| {
