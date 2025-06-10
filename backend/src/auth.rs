@@ -51,6 +51,10 @@ impl AuthUser {
     pub fn user_id(&self) -> Uuid {
         Uuid::parse_str(&self.0.sub).unwrap_or_default()
     }
+    
+    pub fn username(&self)->String {
+         self.0.username.clone()
+    }
 
     pub fn require_permission(&self, permission: &str) -> Result<(), ApiError> {
         if self.0.permissions.contains(&permission.to_string()) {

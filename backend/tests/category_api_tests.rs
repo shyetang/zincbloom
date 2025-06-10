@@ -4,6 +4,8 @@ use axum::{
     http::{Method, Request, StatusCode},
     Router,
 };
+// For `oneshot`
+use backend::services::AdminService;
 use backend::{
     dtos::category::{CreateCategoryPayload, UpdateCategoryPayload}, // DTOs for Category
     handlers::AppState,
@@ -25,7 +27,6 @@ use slug::slugify;
 use sqlx::PgPool;
 use std::sync::{Arc, Once};
 use tower::ServiceExt;
-// For `oneshot`
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
@@ -93,6 +94,7 @@ async fn setup_test_app_for_categories(pool: PgPool) -> Router {
         role_repo.clone(),
         &test_config,
     ));
+    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
     let category_service = Arc::new(CategoryService::new(category_repo.clone()));
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let post_service = Arc::new(PostService::new(
@@ -106,7 +108,8 @@ async fn setup_test_app_for_categories(pool: PgPool) -> Router {
         post_service,
         category_service,
         tag_service,
-        auth_service, // 包含 auth_service
+        auth_service,
+        admin_service,
     };
 
     // 创建 Router

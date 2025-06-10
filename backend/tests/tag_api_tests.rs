@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 // For `oneshot`
-use backend::services::AuthSerVice;
+use backend::services::{AdminService, AuthSerVice};
 use backend::{
     dtos::tag::{CreateTagPayload, UpdateTagPayload}, // DTOs for Tag
     handlers::AppState,
@@ -92,6 +92,7 @@ async fn setup_test_app_for_tags(pool: PgPool) -> Router {
         role_repo.clone(),
         &test_config,
     ));
+    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
     let category_service = Arc::new(CategoryService::new(category_repo.clone()));
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let post_service = Arc::new(PostService::new(
@@ -105,7 +106,8 @@ async fn setup_test_app_for_tags(pool: PgPool) -> Router {
         post_service,
         category_service,
         tag_service,
-        auth_service, // 包含 auth_service
+        auth_service,
+        admin_service,
     };
 
     // 创建 Router

@@ -5,11 +5,14 @@ use crate::handlers::{
     login_handler, register_handler, update_category_handler, update_post_handler,
     update_tag_handler, AppState,
 };
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::Router;
+use crate::handlers::admin::set_user_roles_handler;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
+        // --- Admin 相关的路由 ---
+        .route("/admin/users/{id}/roles",put(set_user_roles_handler))
         // -- Auth 相关路由 --
         .route("/auth/register", post(register_handler))
         .route("/auth/login", post(login_handler))

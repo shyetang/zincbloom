@@ -26,6 +26,7 @@ use std::sync::{Arc, Once};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
+use backend::services::AdminService;
 
 // --- 日志初始化 (保持不变) ---
 static TRACING_INIT_TEST: Once = Once::new();
@@ -78,6 +79,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         role_repo.clone(),
         &test_config,
     ));
+    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
     let category_service = Arc::new(CategoryService::new(category_repo.clone()));
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let post_service = Arc::new(PostService::new(
@@ -92,6 +94,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         category_service,
         tag_service,
         auth_service,
+        admin_service,
     };
 
     // 5. 创建 Router

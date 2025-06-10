@@ -7,7 +7,7 @@ use backend::repositories::{
     PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository,
 };
 use backend::routes::create_router;
-use backend::services::{AuthSerVice, CategoryService, PostService, TagService};
+use backend::services::{AdminService, AuthSerVice, CategoryService, PostService, TagService};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
@@ -57,6 +57,7 @@ async fn main() -> Result<()> {
         role_repo.clone(),
         &config,
     ));
+    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
 
     //  -- 创建 PostService 实例 ---
     let post_service = Arc::new(PostService::new(
@@ -71,6 +72,7 @@ async fn main() -> Result<()> {
         category_service,
         tag_service,
         auth_service,
+        admin_service,
     };
 
     // 创建 Axum 路由
