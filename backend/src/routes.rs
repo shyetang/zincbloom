@@ -8,6 +8,7 @@ use crate::handlers::{
 use axum::routing::{get, post, put};
 use axum::Router;
 use crate::handlers::admin::set_user_roles_handler;
+use crate::handlers::auth::logout_handler;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
@@ -16,6 +17,8 @@ pub fn create_router(app_state: AppState) -> Router {
         // -- Auth 相关路由 --
         .route("/auth/register", post(register_handler))
         .route("/auth/login", post(login_handler))
+        .route("/auth/refresh",post(register_handler))
+        .route("/auth/logout",post(logout_handler))
         // -- Post 相关路由 --
         // POST /posts -> 创建帖子
         // GET  /posts -> 获取帖子列表

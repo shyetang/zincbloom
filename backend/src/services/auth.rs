@@ -168,7 +168,8 @@ impl AuthSerVice {
     }
 
     // 用户登录服务方法
-    pub async fn login_user(&self, payload: UserLoginPayload) -> Result<(String, UserPublic)> {
+    pub async fn login_user(&self, payload: UserLoginPayload) -> Result<(LoginTokens, UserPublic)> {
+        // 验证用户凭证
         let user = self
             .user_repo
             .find_by_username(&payload.username)
@@ -179,43 +180,21 @@ impl AuthSerVice {
         if !verify_password(&user.hashed_password, &payload.password)? {
             return Err(anyhow!("用户名或密码不正确"));
         }
-        // 同时获取用户的角色和权限
-        let roles = self.user_repo.get_user_roles(user.id).await?;
-        let permissions = self.user_repo.get_user_permissions(user.id).await?;
-
-        let role_names: Vec<String> = roles.iter().map(|r| r.name.clone()).collect();
-        let permission_names: Vec<String> = permissions.into_iter().map(|p| p.name).collect();
-
-        let expiration = Utc::now()
-            .checked_add_signed(Duration::hours(self.access_token_expiry_minutes))
-            .expect("创建有效JWT过期时间戳失败")
-            .timestamp();
-
-        // 创建包含角色和权限的 Claims
-        let claims = Claims {
-            sub: user.id.to_string(),
-            username: user.username.to_string(),
-            exp: expiration as usize,
-            roles: role_names.clone(),
-            permissions: permission_names,
-        };
-
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(self.access_token_secret.as_ref()),
-        )
-        .context("生成 JWT 失败")?;
-
+        
+        // 生成一套 Token
+        let tokens = self.generate_and_store_tokens(&user).await?;
+        
+        // 准备返回给客户端的用户公开信息
+        let user_roles = self.user_repo.get_user_roles(user.id).await?;
         let user_public = UserPublic {
             id: user.id,
             username: user.username,
             email: user.email,
             created_at: user.created_at,
-            roles: role_names,
+            roles: user_roles.into_iter().map(|r| r.name).collect(),
         };
 
-        Ok((token, user_public))
+        Ok((tokens, user_public))
     }
 
     // logout
@@ -257,6 +236,7 @@ impl AuthSerVice {
         let roles = self.user_repo.get_user_roles(user.id).await?;
         let permissions = self.user_repo.get_user_permissions(user.id).await?;
         let access_token_exp = Utc::now() + Duration::minutes(self.access_token_expiry_minutes);
+        
         let claims = Claims {
             sub: user.id.to_string(),
             username: user.username.clone(),

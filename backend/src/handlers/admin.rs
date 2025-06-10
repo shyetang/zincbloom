@@ -1,7 +1,7 @@
 use crate::api_error::ApiError;
 use crate::auth::AuthUser;
 use crate::handlers::AppState;
-use crate::models::admin::{SetRolePermissionsPayload, SetUserRolesPayload};
+use crate::dtos::admin::{SetRolePermissionsPayload, SetUserRolesPayload};
 use anyhow::Result;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;

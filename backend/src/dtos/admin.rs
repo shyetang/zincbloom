@@ -10,7 +10,6 @@ pub struct SetUserRolesPayload {
 }
 
 // 用于设置角色权限接口的请求体
-
 pub struct SetRolePermissionsPayload {
     pub permission_ids: Vec<Uuid>,
 }

@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+pub mod admin;
+pub mod auth;
 pub mod category;
 pub mod post;
 pub mod tag;
 
+pub use admin::{SetRolePermissionsPayload, SetUserRolesPayload};
+pub use auth::{LoginResponsePayload, RefreshTokenPayload};
 pub use category::{CreateCategoryPayload, UpdateCategoryPayload};
 pub use post::{CreatePostPayload, UpdatePostPayload};
 pub use tag::{CreateTagPayload, UpdateTagPayload};

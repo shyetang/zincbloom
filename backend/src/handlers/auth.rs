@@ -7,7 +7,7 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
 };
-use serde_json::json;
+use crate::dtos::{LoginResponsePayload, RefreshTokenPayload};
 
 /// 用户注册处理器
 pub async fn register_handler(
@@ -26,9 +26,42 @@ pub async fn login_handler(
     Json(payload): Json<UserLoginPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
     tracing::info!("接收到用户登录请求: {}", payload.username);
-    let (token, user_public) = state.auth_service.login_user(payload).await?;
-    Ok(Json(json!({
-        "token": token,
-        "user": user_public
-    })))
+    
+    let (tokens, user_public) = state.auth_service.login_user(payload).await?;
+    
+    let response_payload = LoginResponsePayload {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        user: user_public,
+    };
+    
+    Ok(Json(response_payload))
+}
+
+/// 刷新token
+pub async fn refresh_token_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<RefreshTokenPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    tracing::info!("接收到刷新 Token 请求");
+    
+    // 刷新token
+    let tokens = state
+        .auth_service
+        .refresh_access_token(&payload.refresh_token)
+        .await?;
+    
+    Ok(Json(tokens))
+}
+
+/// 注销用户
+pub async fn logout_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<RefreshTokenPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    tracing::info!("接收到注销请求");
+
+    state.auth_service.logout(&payload.refresh_token).await?;
+    
+    Ok(StatusCode::NO_CONTENT)
 }

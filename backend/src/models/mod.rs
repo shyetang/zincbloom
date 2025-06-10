@@ -4,7 +4,6 @@ pub mod post;
 pub mod role;
 pub mod tag;
 pub mod user;
-pub mod admin;
 
 pub use category::Category;
 pub use permission::Permission;
