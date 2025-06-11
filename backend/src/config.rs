@@ -10,7 +10,8 @@ pub struct AuthConfig {
     pub jwt_audience: String,  // JWT 受众
     pub access_token_expiry_minutes: i64, // Access Token 过期时间 分钟
     pub refresh_token_expiry_days: i64,   // Refresh Token 过期时间 天
-    
+    pub max_login_failures: u32,    // 允许的最大登录失败次数
+    pub lockout_duration_seconds: i64,  // 账户锁定时长 秒
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -46,8 +47,10 @@ impl AppConfig {
             .set_default("auth.jwt_secret", "default_secret_that_must_be_changed")?
             .set_default("auth.jwt_issuer", "my_blog_app")?
             .set_default("auth.jwt_audience", "my_blog_app_users")?
-            .set_default("auth.access_token_expiry_minutes", 15)?
-            .set_default("auth.refresh_token_expiry_days", 7)?
+            .set_default("auth.access_token_expiry_minutes", 15)? 
+            .set_default("auth.refresh_token_expiry_days", 7)? 
+            .set_default("auth.max_login_failures", 5)? // 默认允许失败5次
+            .set_default("auth.lockout_duration_seconds", 900)? // 默认锁定 15 分钟 (900秒)
             // .set_default(...)? // 其他默认值
 
             // 从环境变量加载配置

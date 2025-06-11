@@ -1,13 +1,9 @@
 use anyhow::{Context, Result};
 use backend::config::AppConfig;
 use backend::handlers::AppState;
-use backend::repositories::{
-    CategoryRepository, PermissionRepository, PostRepository, PostgresCategoryRepository,
-    PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository,
-    PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository,
-};
+use backend::repositories::{CategoryRepository, LoginAttemptRepository, PermissionRepository, PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository, PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository};
 use backend::routes::create_router;
-use backend::services::{AdminService, AuthSerVice, CategoryService, PostService, TagService};
+use backend::services::{AdminService, AuthService, CategoryService, PostService, TagService};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
@@ -48,16 +44,19 @@ async fn main() -> Result<()> {
     let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(db_pool.clone()));
     let _permission_repo: Arc<dyn PermissionRepository> =
         Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
+    let login_attempt_repo: Arc<dyn LoginAttemptRepository> = Arc::new(PostgresLoginAttemptRepository::new(db_pool.clone()));
 
     // -- 实例化所有的 Services ----
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let category_service = Arc::new(CategoryService::new(category_repo.clone()));
-    let auth_service = Arc::new(AuthSerVice::new(
+    let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
         role_repo.clone(),
+        login_attempt_repo.clone(),
         &config,
     ));
     let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
+
 
     //  -- 创建 PostService 实例 ---
     let post_service = Arc::new(PostService::new(

@@ -57,7 +57,15 @@ impl IntoResponse for ApiError {
             )
                 .into_response();
         }
-
+        // 处理业务验证错误
+        if error_chain_contains(&self.0,"无效") || error_chain_contains(&self.0,"格式") { 
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": error_display_for_client}))
+                )
+                .into_response()
+        }
+        
         //  处理由 anyhow! 或 bail! 产生的应用层面 “未找到” 错误
         //    这些错误不是数据库层面的 RowNotFound,而是业务逻辑判断的结果
         // 使用辅助函数检查整个错误链

@@ -19,7 +19,7 @@ use backend::{
         TagRepository,
     },
     routes::create_router,
-    services::{AuthSerVice, CategoryService, PostService, TagService}, // Category service
+    services::{AuthService, CategoryService, PostService, TagService}, // Category service
 };
 use http_body_util::BodyExt;
 use slug::slugify;
@@ -89,7 +89,7 @@ async fn setup_test_app_for_categories(pool: PgPool) -> Router {
     );
 
     // 实例化所有 Services
-    let auth_service = Arc::new(AuthSerVice::new(
+    let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
         role_repo.clone(),
         &test_config,

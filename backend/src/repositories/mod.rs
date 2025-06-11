@@ -1,11 +1,13 @@
 pub mod category;
-mod permission;
+pub mod permission;
 pub mod post;
-mod role;
+pub mod role;
 pub mod tag;
-mod user;
+pub mod user;
+pub mod login_attempt;
 
 pub use category::{CategoryRepository, PostgresCategoryRepository};
+pub use login_attempt::{LoginAttemptRepository, PostgresLoginAttemptRepository};
 pub use permission::{PermissionRepository, PostgresPermissionRepository};
 pub use post::{PostRepository, PostgresPostRepository};
 pub use role::{PostgresRoleRepository, RoleRepository};

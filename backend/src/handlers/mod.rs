@@ -20,7 +20,7 @@ pub use tag::{
 
 pub use auth::{login_handler, register_handler};
 
-use crate::services::{AdminService, AuthSerVice, CategoryService, PostService, TagService};
+use crate::services::{AdminService, AuthService, CategoryService, PostService, TagService};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -28,6 +28,6 @@ pub struct AppState {
     pub post_service: Arc<PostService>,
     pub category_service: Arc<CategoryService>,
     pub tag_service: Arc<TagService>,
-    pub auth_service: Arc<AuthSerVice>,
+    pub auth_service: Arc<AuthService>,
     pub admin_service: Arc<AdminService>,
 }

@@ -1,4 +1,4 @@
-use crate::repositories::{RoleRepository, UserRepository};
+use crate::repositories::{LoginAttemptRepository, RoleRepository, UserRepository};
 use anyhow::{anyhow, Context, Result};
 use std::sync::Arc;
 
@@ -34,14 +34,17 @@ pub struct LoginTokens {
 
 // 认证服务结构体
 #[derive(Clone)]
-pub struct AuthSerVice {
+pub struct AuthService {
     user_repo: Arc<dyn UserRepository>,
     role_repo: Arc<dyn RoleRepository>, // 在注册时分配默认角色，需要 RoleRepository
+    login_attempt_repo: Arc<dyn LoginAttemptRepository>,
     access_token_secret: String,        // 用于签名和验证 token 的密钥
     jwt_issuer: String,                 // JWT 签发者
     jwt_audience: String,               // JWT 受众
     access_token_expiry_minutes: i64,   // Access token 的有效期（分钟）
     refresh_token_expiry_days: i64,     // Refresh token 的有效期（天）
+    max_login_failures: u32,            // 最大尝试登录失败次数
+    lockout_duration_seconds: i64,      // 锁定登录时间
 }
 
 // 密码哈希辅助函数(使用 argon2id)
@@ -83,6 +86,26 @@ fn verify_password(hash_str: &str, password: &str) -> Result<bool> {
     }
 }
 
+// 密码强度验证辅助函数
+fn validate_password_strength(password: &str) -> Result<()> {
+    if password.len() < 8 {
+        return Err(anyhow!("密码无效：长度不能少于8个字符"));
+    }
+    if !password.chars().any(|c| c.is_ascii_uppercase()) {
+        return Err(anyhow!("密码无效：必须包含至少一个大写字母"));
+    }
+    if !password.chars().any(|c| c.is_ascii_lowercase()) {
+        return Err(anyhow!("密码无效：必须包含至少一个小写字母"));
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err(anyhow!("密码无效：必须包含至少一个数字"));
+    }
+    if !password.chars().any(|c| c.is_alphanumeric()) {
+        return Err(anyhow!("密码无效：必须包含至少一个特殊字符"));
+    }
+    Ok(())
+}
+
 // 生成一个长而随机的字符串作为 Refresh Token
 fn generate_refresh_token() -> String {
     rand::rng()
@@ -99,26 +122,34 @@ fn hash_token(token: &str) -> String {
     hash.to_hex().to_string()
 }
 
-impl AuthSerVice {
+impl AuthService {
     // 构造函数
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
         role_repo: Arc<dyn RoleRepository>,
+        login_attempt_repo: Arc<dyn LoginAttemptRepository>,
         config: &AppConfig,
     ) -> Self {
         Self {
             user_repo,
             role_repo,
+            login_attempt_repo,
             access_token_secret: config.auth.jwt_secret.clone(),
             jwt_issuer: config.auth.jwt_issuer.clone(),
             jwt_audience: config.auth.jwt_audience.clone(),
             access_token_expiry_minutes: config.auth.access_token_expiry_minutes,
             refresh_token_expiry_days: config.auth.refresh_token_expiry_days,
+            max_login_failures: config.auth.max_login_failures,
+            lockout_duration_seconds: config.auth.lockout_duration_seconds,
         }
     }
 
     // 用户注册服务方法
     pub async fn register_user(&self, payload: UserRegistrationPayload) -> Result<UserPublic> {
+        // 验证密码策略
+        validate_password_strength(&payload.password)
+            .context("用户注册时密码强度验证失败")?;
+
         if self
             .user_repo
             .find_by_username(&payload.username)
@@ -169,21 +200,28 @@ impl AuthSerVice {
 
     // 用户登录服务方法
     pub async fn login_user(&self, payload: UserLoginPayload) -> Result<(LoginTokens, UserPublic)> {
+        
+        self.check_lockout_status(&payload.username).await?;
+        
         // 验证用户凭证
-        let user = self
-            .user_repo
-            .find_by_username(&payload.username)
-            .await
-            .context("登录时查找用户失败")?
-            .ok_or_else(|| anyhow!("用户名或密码不正确"))?;
+        let user = match self.user_repo.find_by_username(&payload.username).await? {
+            Some(user) => user,
+            None => {
+                self.handle_login_failure(&payload.username).await?;
+                return Err(anyhow!("用户名或密码不正确"));
+            }
+        };
 
         if !verify_password(&user.hashed_password, &payload.password)? {
+            self.handle_login_failure(&payload.username).await?;
             return Err(anyhow!("用户名或密码不正确"));
         }
         
+        self.handle_login_success(&payload.username).await?;
+
         // 生成一套 Token
         let tokens = self.generate_and_store_tokens(&user).await?;
-        
+
         // 准备返回给客户端的用户公开信息
         let user_roles = self.user_repo.get_user_roles(user.id).await?;
         let user_public = UserPublic {
@@ -236,7 +274,7 @@ impl AuthSerVice {
         let roles = self.user_repo.get_user_roles(user.id).await?;
         let permissions = self.user_repo.get_user_permissions(user.id).await?;
         let access_token_exp = Utc::now() + Duration::minutes(self.access_token_expiry_minutes);
-        
+
         let claims = Claims {
             sub: user.id.to_string(),
             username: user.username.clone(),
@@ -249,7 +287,7 @@ impl AuthSerVice {
             &claims,
             &EncodingKey::from_secret(self.access_token_secret.as_ref()),
         )
-        .context("生成 Access Token 失败")?;
+            .context("生成 Access Token 失败")?;
 
         // 生成 Refresh Token，并存储
         let refresh_token = generate_refresh_token();
@@ -277,9 +315,42 @@ impl AuthSerVice {
             &DecodingKey::from_secret(self.access_token_secret.as_ref()),
             &validation,
         )
-        .map_err(|e| {
-            tracing::warn!("Token 验证失败: {}, Token: '{}'", e, token);
-            anyhow!("无效或过期的 Token: {}", e)
-        })
+            .map_err(|e| {
+                tracing::warn!("Token 验证失败: {}, Token: '{}'", e, token);
+                anyhow!("无效或过期的 Token: {}", e)
+            })
+    }
+
+    // 检查账户是否被锁定
+    async fn check_lockout_status(&self, username: &str) -> Result<()> {
+        if let Some(attempt) = self.login_attempt_repo.get_by_username(username).await? {
+            if let Some(lockout_expires_at) = attempt.lockout_expires_at {
+                if Utc::now() < lockout_expires_at {
+                    let remaining = lockout_expires_at - Utc::now();
+                    return Err(anyhow!(
+                        "账户已被锁定，请在 {} 分 {} 秒后重试",
+                        remaining.num_minutes(),
+                        remaining.num_seconds() % 60
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    // 处理登录失败的方法
+    async fn handle_login_failure(&self,username: &str) -> Result<()> {
+        let failure_count = self.login_attempt_repo.record_failure(username).await?;
+        
+        if failure_count as u32 >= self.max_login_failures { 
+            let expires_at = Utc::now() + Duration::seconds(self.lockout_duration_seconds);
+            self.login_attempt_repo.set_lockout(username,expires_at).await?;
+            tracing::warn!("用户 {} 因登录失败次数过多已被锁定", username);
+        }
+        Ok(())
+    }
+    // 处理登录成功
+    async fn handle_login_success(&self,username: &str) -> Result<()> {
+        self.login_attempt_repo.clear_for_username(username).await
     }
 }

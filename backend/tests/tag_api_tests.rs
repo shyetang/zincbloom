@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 // For `oneshot`
-use backend::services::{AdminService, AuthSerVice};
+use backend::services::{AdminService, AuthService};
 use backend::{
     dtos::tag::{CreateTagPayload, UpdateTagPayload}, // DTOs for Tag
     handlers::AppState,
@@ -87,7 +87,7 @@ async fn setup_test_app_for_tags(pool: PgPool) -> Router {
     );
 
     // 实例化所有 Services
-    let auth_service = Arc::new(AuthSerVice::new(
+    let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
         role_repo.clone(),
         &test_config,

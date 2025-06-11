@@ -16,7 +16,7 @@ use backend::{
         UserRepository,
     },
     routes::create_router,
-    services::{AuthSerVice, CategoryService, PostService, TagService},
+    services::{AuthService, CategoryService, PostService, TagService},
 };
 use chrono::{DateTime, Utc};
 use http_body_util::BodyExt;
@@ -74,7 +74,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         Arc::new(PostgresPermissionRepository::new(pool.clone()));
 
     // 3. 实例化所有 Services
-    let auth_service = Arc::new(AuthSerVice::new(
+    let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
         role_repo.clone(),
         &test_config,
