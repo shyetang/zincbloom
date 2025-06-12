@@ -1,3 +1,4 @@
+use crate::dtos::admin::UpdateRolePayload;
 use crate::models::{Permission, Role};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -9,6 +10,8 @@ use uuid::Uuid;
 pub trait RoleRepository: Send + Sync {
     // 创建一个新角色
     async fn create(&self, name: &str, description: Option<&str>) -> Result<Role>;
+    // 根据角色id查找角色
+    async fn find_by_id(&self, role_id: Uuid) -> Result<Option<Role>>;
     // 根据角色名称查找角色
     async fn find_by_name(&self, name: &str) -> Result<Option<Role>>;
     // 给角色分配权限
@@ -19,6 +22,12 @@ pub trait RoleRepository: Send + Sync {
     ) -> Result<()>;
     // 获取某个角色的所有权限
     async fn get_permissions_for_role(&self, role_id: Uuid) -> Result<Vec<Permission>>;
+    // 获取所有权限列表
+    async fn list(&self) -> Result<Vec<Role>>;
+    // 更新一个已存在的角色
+    async fn update(&self, role_id: Uuid, payload: &UpdateRolePayload) -> Result<Role>;
+    // 删除一个角色
+    async fn delete(&self, role_id: Uuid) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -47,10 +56,23 @@ impl RoleRepository for PostgresRoleRepository {
             name,
             description
         )
-        .fetch_one(&self.pool)
-        .await
-        .context(format!("创建 角色 {} 失败", name))?;
+            .fetch_one(&self.pool)
+            .await
+            .context(format!("创建 角色 {} 失败", name))?;
 
+        Ok(role)
+    }
+
+    async fn find_by_id(&self, role_id: Uuid) -> Result<Option<Role>> {
+        let role = sqlx::query_as!(
+            Role,
+            r#"
+            select id,name,description,created_at,updated_at from roles where id = $1
+            "#,
+            role_id
+        )
+            .fetch_optional(&self.pool)
+            .await?;
         Ok(role)
     }
 
@@ -63,9 +85,9 @@ impl RoleRepository for PostgresRoleRepository {
             "#,
             name
         )
-        .fetch_optional(&self.pool)
-        .await
-        .context(format!("查找角色 {} 失败", name))?;
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("查找角色 {} 失败", name))?;
         Ok(role)
     }
 
@@ -95,9 +117,9 @@ impl RoleRepository for PostgresRoleRepository {
             role_id,
             permission_ids
         )
-        .execute(&self.pool)
-        .await
-        .context(format!("为用户id: {} 分配角色失败", role_id))?;
+            .execute(&self.pool)
+            .await
+            .context(format!("为用户id: {} 分配角色失败", role_id))?;
 
         Ok(())
     }
@@ -113,10 +135,61 @@ impl RoleRepository for PostgresRoleRepository {
            "#,
             role_id
         )
-        .fetch_all(&self.pool)
-        .await
-        .context(format!("获取角色id {} 的所有权限失败", role_id))?;
+            .fetch_all(&self.pool)
+            .await
+            .context(format!("获取角色id {} 的所有权限失败", role_id))?;
 
         Ok(permissions)
+    }
+
+    async fn list(&self) -> Result<Vec<Role>> {
+        sqlx::query_as!(
+            Role,
+            "select id,name,description,created_at,updated_at from roles order by name"
+        )
+            .fetch_all(&self.pool)
+            .await
+            .context("数据库层查询角色列表失败")
+    }
+
+    async fn update(&self, role_id: Uuid, payload: &UpdateRolePayload) -> Result<Role> {
+        // 获取当前角色，以便处理部分更新
+        let mut role = self.find_by_id(role_id).await?
+            .ok_or_else(|| anyhow::anyhow!("未找到ID为 {} 的角色", role_id))?;
+
+        if let Some(name) = &payload.name {
+            role.name = name.clone()
+        }
+        if let Some(description) = &payload.description {
+            role.description = Some(description.clone())
+        }
+        let updated_role = sqlx::query_as!(
+            Role,
+            r#"
+            update roles
+            set name = $1,description = $2,updated_at = now()
+            where id = $3
+            returning *
+            "#,
+            role.name,
+            role.description,
+            role_id
+        )
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(updated_role)
+    }
+
+    async fn delete(&self, role_id: Uuid) -> Result<()> {
+        let result = sqlx::query!(
+            "delete from roles where id = $1",
+            role_id
+        )
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(anyhow::anyhow!("尝试删除角色失败：未找到ID为 {} 的角色", role_id));
+        }
+        Ok(())
     }
 }

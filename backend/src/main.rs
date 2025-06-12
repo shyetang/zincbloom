@@ -3,7 +3,7 @@ use backend::config::AppConfig;
 use backend::handlers::AppState;
 use backend::repositories::{CategoryRepository, LoginAttemptRepository, PermissionRepository, PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository, PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository};
 use backend::routes::create_router;
-use backend::services::{AdminService, AuthService, CategoryService, PostService, TagService};
+use backend::services::{AdminService, AuthService, CategoryService, PostService, TagService, UserService};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(db_pool.clone()));
     let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(db_pool.clone()));
     let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(db_pool.clone()));
-    let _permission_repo: Arc<dyn PermissionRepository> =
+    let permission_repo: Arc<dyn PermissionRepository> =
         Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
     let login_attempt_repo: Arc<dyn LoginAttemptRepository> = Arc::new(PostgresLoginAttemptRepository::new(db_pool.clone()));
 
@@ -55,7 +55,8 @@ async fn main() -> Result<()> {
         login_attempt_repo.clone(),
         &config,
     ));
-    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
+    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone(),permission_repo.clone()));
+    let user_service = Arc::new(UserService::new(user_repo.clone()));
 
 
     //  -- 创建 PostService 实例 ---
@@ -72,6 +73,7 @@ async fn main() -> Result<()> {
         tag_service,
         auth_service,
         admin_service,
+        user_service,
     };
 
     // 创建 Axum 路由
