@@ -2,6 +2,15 @@ use anyhow::{Context, Result};
 use config::{Config as ConfigRs, Environment, File};
 use serde::Deserialize;
 
+// 邮件服务相关配置
+#[derive(Debug, Deserialize, Clone)]
+pub struct EmailConfig {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_user: String,
+    pub smtp_pass: String,
+    pub from_address: String,
+}
 // 认证相关配置结构体
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthConfig {
@@ -30,6 +39,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
     pub server: ServerConfig,
     pub auth: AuthConfig,
+    pub email: EmailConfig,
 }
 
 impl AppConfig {
@@ -47,10 +57,16 @@ impl AppConfig {
             .set_default("auth.jwt_secret", "default_secret_that_must_be_changed")?
             .set_default("auth.jwt_issuer", "my_blog_app")?
             .set_default("auth.jwt_audience", "my_blog_app_users")?
-            .set_default("auth.access_token_expiry_minutes", 15)? 
-            .set_default("auth.refresh_token_expiry_days", 7)? 
+            .set_default("auth.access_token_expiry_minutes", 15)?
+            .set_default("auth.refresh_token_expiry_days", 7)?
             .set_default("auth.max_login_failures", 5)? // 默认允许失败5次
             .set_default("auth.lockout_duration_seconds", 900)? // 默认锁定 15 分钟 (900秒)
+            // 邮件相关默认值
+            .set_default("email.smtp_host","localhost")?
+            .set_default("email.smtp_port",1025)?
+            .set_default("email.smtp_user","")?
+            .set_default("email.smtp_pass","")?
+            .set_default("email.from_address","np-reply@localhost.com")?
             // .set_default(...)? // 其他默认值
 
             // 从环境变量加载配置
