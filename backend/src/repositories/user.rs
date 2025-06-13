@@ -56,6 +56,9 @@ pub trait UserRepository: Send + Sync {
     async fn update_password(&self, user_id: Uuid, new_hashed_password: &str) -> Result<()>;
     // 为用户删除所有的 refresh token
     async fn delete_all_refresh_token_for_user(&self, user_id: Uuid) -> Result<()>;
+
+    // 更新 email_verified_at 字段
+    async fn mark_email_as_verified(&self, user_id: Uuid) -> Result<()>;
 }
 
 // UserRepository 的 PostgreSQL 具体实现
@@ -404,6 +407,17 @@ impl UserRepository for PostgresUserRepository {
         sqlx::query!("DELETE FROM refresh_tokens WHERE user_id = $1", user_id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    async fn mark_email_as_verified(&self, user_id: Uuid) -> Result<()> {
+        sqlx::query!(
+            "update users set email_verified_at = now() where id = $1",
+            user_id
+        )
+            .execute(&self.pool)
+            .await?;
+
         Ok(())
     }
 }

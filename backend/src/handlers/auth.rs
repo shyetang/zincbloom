@@ -1,4 +1,5 @@
 use crate::api_error::ApiError;
+use crate::dtos::auth::{ForgotPasswordPayload, ResetPasswordPayload, VerifyEmailPayload};
 use crate::dtos::{LoginResponsePayload, RefreshTokenPayload, UserLoginPayload, UserRegistrationPayload};
 use crate::handlers::AppState;
 use anyhow::Result;
@@ -8,7 +9,7 @@ use axum::{
     http::StatusCode,
 };
 
-/// 用户注册处理器
+// 用户注册处理器
 pub async fn register_handler(
     State(state): State<AppState>,
     Json(payload): Json<UserRegistrationPayload>,
@@ -19,7 +20,7 @@ pub async fn register_handler(
     Ok((StatusCode::CREATED, Json(user_public)))
 }
 
-/// 用户登录处理器
+// 用户登录处理器
 pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<UserLoginPayload>,
@@ -37,7 +38,7 @@ pub async fn login_handler(
     Ok(Json(response_payload))
 }
 
-/// 刷新token
+// 刷新token
 pub async fn refresh_token_handler(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenPayload>,
@@ -53,7 +54,7 @@ pub async fn refresh_token_handler(
     Ok(Json(tokens))
 }
 
-/// 注销用户
+// 注销用户
 pub async fn logout_handler(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenPayload>,
@@ -62,5 +63,33 @@ pub async fn logout_handler(
 
     state.auth_service.logout(&payload.refresh_token).await?;
 
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// 验证邮箱处理器
+pub async fn verify_email_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyEmailPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.auth_service.verify_email(&payload.token).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// 忘记密码处理器
+pub async fn forgot_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.auth_service.request_password_reset(&payload.email).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// 重置密码处理器
+pub async fn reset_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    state.auth_service.reset_password(&payload).await?;
     Ok(StatusCode::NO_CONTENT)
 }

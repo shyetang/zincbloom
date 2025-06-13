@@ -1,9 +1,12 @@
 use crate::config::AppConfig;
+use crate::dtos::auth::ResetPasswordPayload;
 use crate::dtos::{UserLoginPayload, UserRegistrationPayload};
 use crate::models::{User, UserPublic};
-use crate::repositories::{LoginAttemptRepository, RoleRepository, UserRepository};
+use crate::repositories::{LoginAttemptRepository, OneTimeTokenRepository, RoleRepository, UserRepository};
+use crate::services::EmailService;
 use crate::utils::{hash_password, validate_password_strength, verify_password};
 use anyhow::{anyhow, Context, Result};
+use blake3::hash;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use rand::distr::Alphanumeric;
@@ -34,6 +37,8 @@ pub struct AuthService {
     user_repo: Arc<dyn UserRepository>,
     role_repo: Arc<dyn RoleRepository>, // 在注册时分配默认角色，需要 RoleRepository
     login_attempt_repo: Arc<dyn LoginAttemptRepository>,
+    one_time_token_repo: Arc<dyn OneTimeTokenRepository>,
+    email_service: Arc<EmailService>,
     access_token_secret: String,        // 用于签名和验证 token 的密钥
     jwt_issuer: String,                 // JWT 签发者
     jwt_audience: String,               // JWT 受众
@@ -60,18 +65,31 @@ fn hash_token(token: &str) -> String {
     hash.to_hex().to_string()
 }
 
+// 生成一次性令牌
+fn generate_one_time_token() -> String {
+    rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(48) // 64位长度
+        .map(char::from)
+        .collect()
+}
+
 impl AuthService {
     // 构造函数
     pub fn new(
         user_repo: Arc<dyn UserRepository>,
         role_repo: Arc<dyn RoleRepository>,
         login_attempt_repo: Arc<dyn LoginAttemptRepository>,
+        one_time_token_repo: Arc<dyn OneTimeTokenRepository>,
+        email_service: Arc<EmailService>,
         config: &AppConfig,
     ) -> Self {
         Self {
             user_repo,
             role_repo,
             login_attempt_repo,
+            one_time_token_repo,
+            email_service,
             access_token_secret: config.auth.jwt_secret.clone(),
             jwt_issuer: config.auth.jwt_issuer.clone(),
             jwt_audience: config.auth.jwt_audience.clone(),
@@ -127,6 +145,26 @@ impl AuthService {
         let roles_assigned = self.user_repo.get_user_roles(new_user.id).await?;
         let role_names = roles_assigned.into_iter().map(|r| r.name).collect();
 
+        // --- 发送邮箱验证 ---
+        let verification_token = generate_one_time_token();
+        let token_hash = hash_token(&verification_token);
+        let expires_at = Utc::now() + Duration::hours(24);
+
+        self.one_time_token_repo
+            .store_token(new_user.id, "email_verification", &token_hash, expires_at)
+            .await?;
+
+        // 准备邮件内容
+        let verification_link = format!("http://localhost:3000/verify-email?token={}", verification_token);   // URL应来自配置
+        let email_subject = "欢迎来到我的博客 - 请验证您的邮箱地址";
+        let email_body = format!(
+            "<p>您好, {},</p><p>感谢您的注册！请点击下面的链接来验证您的邮箱地址：</p><p><a href=\"{}\">验证邮箱</a></p><p>此链接将在24小时后失效。</p>",
+            new_user.username, verification_link
+        );
+
+        // 发送邮件
+        self.email_service.send_email(&new_user.email, email_subject, &email_body).await?;
+
         Ok(UserPublic {
             id: new_user.id,
             username: new_user.username,
@@ -134,6 +172,23 @@ impl AuthService {
             created_at: new_user.created_at,
             roles: role_names,
         })
+    }
+
+    // 处理邮箱验证
+    pub async fn verify_email(&self, token: &str) -> Result<()> {
+        let token_hash = hash_token(token);
+
+        // 查找并消费令牌
+        let user_id = self.one_time_token_repo
+            .find_and_consume_token(&token_hash, "email_verification")
+            .await?
+            .ok_or_else(|| anyhow!("邮箱验证失败：无效或已过期的令牌"))?;
+
+        // 将用户的email_verified_at 字段更新为当前时间
+        self.user_repo.mark_email_as_verified(user_id).await?;
+
+        tracing::info!("用户 {} 的邮箱已成功验证", user_id);
+        Ok(())
     }
 
     // 用户登录服务方法
@@ -289,5 +344,64 @@ impl AuthService {
     // 处理登录成功
     async fn handle_login_success(&self, username: &str) -> Result<()> {
         self.login_attempt_repo.clear_for_username(username).await
+    }
+
+    // 请求密码重置
+    pub async fn request_password_reset(&self, email: &str) -> Result<()> {
+        // 根据邮箱查找用户
+        let user = match self.user_repo.find_by_email(email).await? {
+            // **重要安全策略**: 如果邮箱不存在，我们不应该告诉客户端“该邮箱未注册”。
+            // 而是应该静默地成功返回，就像邮件已经发送了一样。
+            // 这可以防止攻击者通过这个接口来探测哪些邮箱是已注册用户（用户名枚举攻击）。
+            None => {
+                tracing::warn!("收到一个不存在的邮箱 {} 的密码重置请求，静默处理。", email);
+                return Ok(());
+            }
+            Some(user) => user
+        };
+
+        // 生成并存储一次性重置token
+        let reset_token = generate_one_time_token();
+        let token_hash = hash_token(&reset_token);
+        let expires_at = Utc::now() + Duration::minutes(15);
+
+        self.one_time_token_repo
+            .store_token(user.id, "password_reset", &token_hash, expires_at)
+            .await?;
+
+        // 发送密码重置邮件
+        let reset_link = format!("http://localhost:3000/reset-password?token={}", reset_token); // URL应来自配置
+        let email_subject = "密码重置请求权";
+        let email_body = format!(
+            "<p>您好, {},</p><p>我们收到了一个为您的账户重置密码的请求。请点击下面的链接来设置新密码：</p><p><a href=\"{}\">重置密码</a></p><p>如果您没有请求重置密码，请忽略此邮件。此链接将在30分钟后失效。</p>",
+            user.username, reset_link
+        );
+
+        self.email_service.send_email(&user.email, email_subject, &email_body).await
+    }
+
+    // 重置密码
+    pub async fn reset_password(&self, payload: &ResetPasswordPayload) -> Result<()> {
+        // 基础验证
+        if payload.new_password != payload.confirm_password {
+            return Err(anyhow!("新密码与确认密码不匹配"));
+        }
+        validate_password_strength(&payload.new_password)?;
+
+        // 验证并消费重置令牌
+        let token_hash = hash_token(&payload.token);
+        let user_id = self.one_time_token_repo
+            .find_and_consume_token(&token_hash, "password_reset")
+            .await?
+            .ok_or_else(|| anyhow!("密码重置失败：无效、已过期或已使用的令牌"))?;
+
+        // 哈希新密码并更新到数据库
+        let new_hashed_password = hash_token(&payload.new_password);
+        self.user_repo.update_password(user_id, &new_hashed_password).await?;
+        // 密码重置后，让该用户所有其他设备上的会话都失效
+        self.user_repo.delete_all_refresh_token_for_user(user_id).await?;
+
+        tracing::info!("用户 {} 已成功重置密码，并撤销了所有旧会话。", user_id);
+        Ok(())
     }
 }
