@@ -1,8 +1,10 @@
-pub mod models;
 pub mod api_error;
+pub mod auth;
 pub mod config;
 pub mod dtos;
 pub mod handlers;
+pub mod models;
 pub mod repositories;
 pub mod routes;
 pub mod services;
+pub mod utils;

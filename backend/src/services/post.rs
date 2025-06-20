@@ -51,7 +51,11 @@ impl PostService {
     }
 
     // 创建帖子，并返回包含完整关联信息的 PostDetailDto
-    pub async fn create_post(&self, payload: CreatePostPayload) -> Result<PostDetailDto> {
+    pub async fn create_post(
+        &self,
+        author_id: Uuid,
+        payload: CreatePostPayload,
+    ) -> Result<PostDetailDto> {
         if payload.title.trim().is_empty() {
             // 使用 anyhow！ 宏创建错误
             return Err(anyhow!("标题不能为空"));
@@ -73,7 +77,7 @@ impl PostService {
         // 调用仓库，repo.create 返回基本的 Post 对象，它已经处理了关联表的写入
         let created_post_basic = self
             .repo
-            .create(&payload, &slug)
+            .create(author_id, &payload, &slug)
             .await
             .context("Service未能创建帖子基本信息及关联")?;
 
@@ -311,5 +315,10 @@ impl PostService {
             .delete(id)
             .await
             .context(format!("Service未能删除帖子 (id: {})", id))
+    }
+    
+    // 获取 post 的作者 id
+    pub async fn get_post_author(&self,post_id: Uuid) -> Result<Option<Uuid>> {
+        self.repo.get_author_id(post_id).await.context("Service层获取作者ID失败")
     }
 }

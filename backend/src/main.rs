@@ -2,11 +2,16 @@ use anyhow::{Context, Result};
 use backend::config::AppConfig;
 use backend::handlers::AppState;
 use backend::repositories::{
-    CategoryRepository, PostRepository, PostgresCategoryRepository, PostgresPostRepository,
-    PostgresTagRepository, TagRepository,
+    CategoryRepository, LoginAttemptRepository, OneTimeTokenRepository, PermissionRepository,
+    PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository,
+    PostgresOneTimeTokenRepository, PostgresPermissionRepository, PostgresPostRepository,
+    PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository,
+    TagRepository, UserRepository,
 };
 use backend::routes::create_router;
-use backend::services::{CategoryService, PostService, TagService};
+use backend::services::{
+    AdminService, AuthService, CategoryService, EmailService, PostService, TagService, UserService,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
@@ -24,6 +29,8 @@ async fn main() -> Result<()> {
     // 加载配置
     let config = AppConfig::from_env().context("加载应用配置失败")?;
 
+    tracing::info!("应用程序正在使用的邮件配置: {:?}", config.email);
+
     // 设置数据库连接池
     let db_pool = PgPool::connect(&config.database.url)
         .await
@@ -38,23 +45,45 @@ async fn main() -> Result<()> {
     tracing::info!("数据库迁移已应用。");
 
     //  -- 依赖注入 --
-    //  -- 创建 CategoryService 实例 ---
-    let category_repo = Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
-    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
-    let category_service = Arc::new(CategoryService::new(category_repo_trait.clone()));
+    //  -- 实例化所有的Repository ---
+    let category_repo: Arc<dyn CategoryRepository> =
+        Arc::new(PostgresCategoryRepository::new(db_pool.clone()));
+    let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(db_pool.clone()));
+    let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(db_pool.clone()));
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(db_pool.clone()));
+    let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(db_pool.clone()));
+    let permission_repo: Arc<dyn PermissionRepository> =
+        Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
+    let login_attempt_repo: Arc<dyn LoginAttemptRepository> =
+        Arc::new(PostgresLoginAttemptRepository::new(db_pool.clone()));
+    let one_time_token_repo: Arc<dyn OneTimeTokenRepository> =
+        Arc::new(PostgresOneTimeTokenRepository::new(db_pool.clone()));
 
-    // -- 创建 TagService 实例 ----
-    let tag_repo = Arc::new(PostgresTagRepository::new(db_pool.clone()));
-    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
-    let tag_service = Arc::new(TagService::new(tag_repo_trait.clone()));
+    // -- 实例化所有的 Services ----
+    let tag_service = Arc::new(TagService::new(tag_repo.clone()));
+    let category_service = Arc::new(CategoryService::new(category_repo.clone()));
+    let email_service = Arc::new(EmailService::new(config.email.clone()));
+
+    let auth_service = Arc::new(AuthService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        login_attempt_repo.clone(),
+        one_time_token_repo.clone(),
+        email_service.clone(),
+        &config,
+    ));
+    let admin_service = Arc::new(AdminService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        permission_repo.clone(),
+    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone()));
 
     //  -- 创建 PostService 实例 ---
-    let post_repo = Arc::new(PostgresPostRepository::new(db_pool.clone()));
-    let post_repo_trait: Arc<dyn PostRepository> = post_repo;
     let post_service = Arc::new(PostService::new(
-        post_repo_trait.clone(),
-        category_repo_trait.clone(),
-        tag_repo_trait.clone(),
+        post_repo.clone(),
+        category_repo.clone(),
+        tag_repo.clone(),
     ));
 
     // 创建 AppState
@@ -62,6 +91,9 @@ async fn main() -> Result<()> {
         post_service,
         category_service,
         tag_service,
+        auth_service,
+        admin_service,
+        user_service,
     };
 
     // 创建 Axum 路由

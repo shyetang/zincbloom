@@ -1,1041 +1,632 @@
 use anyhow::{Context, Result};
-
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{Method, Request, StatusCode},
     Router,
 };
-
-use tower::ServiceExt;
-
+use backend::utils::hash_password;
 use backend::{
+    config::{AppConfig, AuthConfig, DatabaseConfig, EmailConfig, ServerConfig},
+    dtos::{
+        post::{CreatePostPayload, PostDetailDto, UpdatePostPayload},
+        PaginatedResponse,
+    },
     handlers::AppState,
-    models::{Category, Post, Tag},
-    repositories::{PostRepository, PostgresPostRepository},
+    models::{Category, Post, Role, Tag, User},
+    repositories::{
+        CategoryRepository, LoginAttemptRepository, OneTimeTokenRepository, PermissionRepository,
+        PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository,
+        PostgresOneTimeTokenRepository, PostgresPermissionRepository, PostgresPostRepository,
+        PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository,
+        TagRepository, UserRepository,
+    },
     routes::create_router,
-    services::PostService,
+    services::{
+        AdminService, AuthService, CategoryService, EmailService, PostService, TagService,
+        UserService,
+    },
 };
-
-use axum::http::Method;
-use chrono::{DateTime, SubsecRound, Utc};
+use http_body_util::BodyExt;
+use slug::slugify;
 use sqlx::PgPool;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
+use tower::ServiceExt;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
-use http_body_util::BodyExt;
-
-use backend::dtos::post::PostDetailDto;
-use backend::dtos::{CreatePostPayload, PaginatedResponse, UpdatePostPayload};
-use backend::repositories::{
-    CategoryRepository, PostgresCategoryRepository, PostgresTagRepository, TagRepository,
-};
-use backend::services::{CategoryService, TagService};
-use std::sync::Once;
-use tracing_subscriber::EnvFilter;
-// 导入 EnvFilter
-
+// --- 日志初始化 ---
 static TRACING_INIT_TEST: Once = Once::new();
-// use hyper::body;
 
-// --- 辅助函数：设置测试环境 ---
-// 这个函数会在每个 #[sqlx::test] 标记的测试运行前被调用
-// 它返回 测试所需的 AppState 或 Router
+fn ensure_tracing_is_initialized_for_test() {
+    TRACING_INIT_TEST.call_once(|| {
+        let default_filter = "info,backend=trace,sqlx=warn";
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new(default_filter));
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_test_writer()
+            .try_init()
+            .ok();
+    });
+}
+
+// --- 测试环境设置函数 ---
 async fn setup_test_app(pool: PgPool) -> Router {
-    // 接收由 #[sqlx::test] 注入的连接池
-    ensure_tracing_is_initialized_for_test(); // 在测试函数开头调用
+    ensure_tracing_is_initialized_for_test();
 
-    // 1. 创建依赖实例
+    // 1. 为测试手动创建完整的 AppConfig
+    let test_config = AppConfig {
+        database: DatabaseConfig {
+            url: String::new(), // 未使用, 因为 pool 是直接注入的
+        },
+        server: ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+        },
+        // 使用与 auth_api_tests 一致的认证配置
+        auth: AuthConfig {
+            jwt_secret: "test_secret_for_posts".to_string(),
+            jwt_issuer: "test_issuer".to_string(),
+            jwt_audience: "test_audience".to_string(),
+            access_token_expiry_minutes: 5,
+            refresh_token_expiry_days: 1,
+            max_login_failures: 5,
+            lockout_duration_seconds: 900,
+        },
+        // 添加邮件配置，因为 AuthService 依赖它
+        email: EmailConfig {
+            smtp_host: "localhost".to_string(),
+            smtp_port: 1025, // MailHog/MailCatcher 的默认端口
+            smtp_user: "".to_string(),
+            smtp_pass: "".to_string(),
+            from_address: "test@example.com".to_string(),
+        },
+    };
 
-    let category_repo = Arc::new(PostgresCategoryRepository::new(pool.clone()));
-    let category_repo_trait: Arc<dyn CategoryRepository> = category_repo;
-    let category_service = Arc::new(CategoryService::new(category_repo_trait.clone()));
+    // 2. 实例化所有 Repositories
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(pool.clone()));
+    let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(pool.clone()));
+    let permission_repo: Arc<dyn PermissionRepository> =
+        Arc::new(PostgresPermissionRepository::new(pool.clone()));
+    let one_time_token_repo: Arc<dyn OneTimeTokenRepository> =
+        Arc::new(PostgresOneTimeTokenRepository::new(pool.clone()));
+    let login_attempt_repo: Arc<dyn LoginAttemptRepository> =
+        Arc::new(PostgresLoginAttemptRepository::new(pool.clone()));
+    let category_repo: Arc<dyn CategoryRepository> =
+        Arc::new(PostgresCategoryRepository::new(pool.clone()));
+    let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(pool.clone()));
+    let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(pool.clone()));
 
-    let tag_repo = Arc::new(PostgresTagRepository::new(pool.clone()));
-    let tag_repo_trait: Arc<dyn TagRepository> = tag_repo;
-    let tag_service = Arc::new(TagService::new(tag_repo_trait.clone()));
-
-    let post_repo = Arc::new(PostgresPostRepository::new(pool.clone()));
-    let post_repo_trait: Arc<dyn PostRepository> = post_repo;
-    let post_service = Arc::new(PostService::new(
-        post_repo_trait.clone(),
-        category_repo_trait.clone(),
-        tag_repo_trait.clone(),
+    // 3. 实例化所有 Services
+    let email_service = Arc::new(EmailService::new(test_config.email.clone()));
+    let auth_service = Arc::new(AuthService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        login_attempt_repo,
+        one_time_token_repo,
+        email_service,
+        &test_config,
     ));
-    // 2. 创建应用状态
+    let admin_service = Arc::new(AdminService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        permission_repo,
+    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone()));
+    let category_service = Arc::new(CategoryService::new(category_repo.clone()));
+    let tag_service = Arc::new(TagService::new(tag_repo.clone()));
+    let post_service = Arc::new(PostService::new(
+        post_repo.clone(),
+        category_repo.clone(),
+        tag_repo.clone(),
+    ));
+
+    // 4. 创建完整的 AppState
     let app_state = AppState {
         post_service,
         category_service,
         tag_service,
+        auth_service,
+        admin_service,
+        user_service,
     };
 
-    // 3. 创建Router
+    // 5. 创建 Router
     create_router(app_state)
 }
 
-// 一个辅助函数，可以在每个 #[sqlx::test] 函数的开头调用，或者在测试模块的 setup 函数中调用
-fn ensure_tracing_is_initialized_for_test() {
-    TRACING_INIT_TEST.call_once(|| {
-        // 定义默认的日志过滤规则
-        // 例如: info 级别全局, 你的 crate (blog_backend) 设置为 trace, sqlx 设置为 warn
-        let default_filter = "info,blog_backend=trace,sqlx=warn"; // 将 "blog_backend" 替换为你的实际 crate 名称
+// --- 测试辅助函数 ---
 
-        // 尝试从 RUST_LOG 环境变量加载过滤器，如果失败或未设置，则使用默认值
-        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|e| {
-            // 可选: 打印一个警告到 stderr，说明 RUST_LOG 解析失败，使用了默认值
-            eprintln!(
-                "[测试日志初始化警告] 解析 RUST_LOG 失败 ('{}'), 将使用默认过滤规则: '{}'",
-                e, default_filter
-            );
-            EnvFilter::new(default_filter)
-        });
+/// 注册一个新用户，并赋予指定角色
+async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Result<User> {
+    // 确保角色存在
+    let role = sqlx::query_as!(
+        Role,
+        "SELECT id, name, description, created_at, updated_at FROM roles WHERE name = $1",
+        role_name
+    )
+    .fetch_optional(pool)
+    .await?
+    .context(format!(
+        "Role '{}' not found in database. Make sure migrations are run.",
+        role_name
+    ))?;
 
-        tracing_subscriber::fmt()
-            .with_env_filter(env_filter) // 应用获取到的过滤器
-            .with_test_writer() // 这是关键！确保日志输出与测试框架集成，能被捕获或显示
-            .try_init() // 尝试初始化，如果已经初始化过了，它会失败，但不会 panic
-            .ok(); // 忽略 try_init() 可能返回的错误 (例如 "already initialized")
-    });
+    // 为用户创建一个有效的密码哈希
+    let valid_password_hash = hash_password("StrongPassword123!")?;
+
+    // 创建用户
+    let user = sqlx::query_as!(
+        User,
+        r#"INSERT INTO users (id, username, email, hashed_password) VALUES ($1, $2, $3, $4)
+           RETURNING id, username, email, hashed_password, created_at, updated_at,email_verified_at"#,
+        Uuid::new_v4(),
+        name,
+        format!("{}@example.com", name),
+        valid_password_hash
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // 赋予角色
+    sqlx::query!(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+        user.id,
+        role.id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(user)
 }
 
-// --- 辅助函数：在测试数据库中创建帖子 ---
-// 返回创建的 Post 列表，以便后续断言
-async fn seed_posts(pool: &PgPool, count: i32) -> Result<Vec<Post>> {
-    let mut posts = Vec::new();
-    for i in 0..count {
-        let title = format!("Test Post {}", i + 1);
-        let slug = slug::slugify(&title);
-        let content = format!("Content for test post {}.", i + 1);
-        // 注意：直接 Insert，依赖 create_at/update_at 默认值，published_at 为 NULL
-        // 为了测试分页排序，最好让 created_at/published_at 不同且有序
-        // 这里简单处理，让它们略有不同
-        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-
-        let post = sqlx::query_as!(
-            Post,
-            r#"
-            insert into posts (id,slug,title,content,published_at)
-            values ($1,$2,$3,$4,$5)
-            returning id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at
-            "#,
-            Uuid::new_v4(),
-            slug,
-            title,
-            content,
-            // 为了测试已发布列表，这里直接设置为当前时间
-            // 如果要测试草稿，可以设为 None::<DateTime<Utc>>
-            Some(Utc::now())
+/// 辅助函数：通过模拟API请求为指定用户登录并获取token
+async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Result<String> {
+    let login_payload = serde_json::json!({ "username": username, "password": password });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&login_payload)?))?,
         )
-            .fetch_one(pool)
-            .await
-            .context(format!("Seeding post {} failed",i + 1))?;
-        posts.push(post);
-        // 在循环中短暂 sleep 来确保 created_at 不同，以便测试排序
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    }
-    // 让最新的帖子排在最前面 (如果默认排序是 DESC)
-    posts.reverse();
-    Ok(posts)
+        .await?;
+
+    let body_bytes = response.into_body().collect().await?.to_bytes();
+    let body_json: serde_json::Value = serde_json::from_slice(&body_bytes)?;
+
+    let token = body_json["access_token"]
+        .as_str()
+        .context("access_token not found in login response")?
+        .to_string();
+
+    Ok(token)
 }
 
-// 返回创建的 Post 列表，以便后续断言
-async fn seed_one_post(pool: &PgPool, title: &str, content: &str, published: bool) -> Result<Post> {
-    let slug = slug::slugify(title);
-    let published_at: Option<DateTime<Utc>> = if published { Some(Utc::now()) } else { None };
+/// 辅助函数：注册一个随机用户，并以该用户身份登录，返回(token, user_id)
+/// 这是为了确保每个测试用例的用户都是隔离的
+async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
+    let username = format!("testuser_{}", Uuid::new_v4());
+    let email = format!("test_{}@example.com", username);
+    let password = "StrongPassword123!"; // 使用符合策略的密码
 
+    // 注册
+    let register_payload = serde_json::json!({
+        "username": &username,
+        "email": &email,
+        "password": &password
+    });
+    let _ = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&register_payload)?))?,
+        )
+        .await?;
+
+    // 登录
+    let login_payload = serde_json::json!({ "username": &username, "password": &password });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&login_payload)?))?,
+        )
+        .await?;
+
+    // 解析响应以获取 token 和 user_id
+    let body_bytes = response.into_body().collect().await?.to_bytes();
+    let login_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
+
+    let token = login_response["access_token"]
+        .as_str()
+        .context("Login response did not contain 'access_token'")?
+        .to_string();
+
+    let user_id_str = login_response["user"]["id"]
+        .as_str()
+        .context("Login response did not contain 'user.id'")?;
+
+    let user_id = Uuid::parse_str(user_id_str)?;
+
+    Ok((token, user_id))
+}
+
+/// 辅助函数：在数据库中插入一篇文章
+async fn seed_one_post(
+    pool: &PgPool,
+    author_id: Uuid,
+    title: &str,
+    published: bool,
+) -> Result<Post> {
+    let slug = slugify(title);
     let post = sqlx::query_as!(
         Post,
         r#"
-        insert into posts (id,slug,title,content,published_at)
-        values ($1,$2,$3,$4,$5)
-        returning id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!", published_at
+        INSERT INTO posts (id, slug, title, content, author_id, published_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, slug, title, content, author_id, created_at, updated_at, published_at
         "#,
         Uuid::new_v4(),
         slug,
         title,
-        content,
-        published_at,
+        "Some default content.",
+        author_id,
+        if published {
+            Some(chrono::Utc::now())
+        } else {
+            None
+        }
     )
-        .fetch_one(pool)
-        .await
-        .context(format!("Seeding post '{}' failed",title))?;
-
+    .fetch_one(pool)
+    .await?;
     Ok(post)
 }
 
-// --- 辅助函数：在测试数据库中创建单个分类 ---
-async fn seed_one_category_for_post_test(pool: &PgPool, name: &str) -> Result<Category> {
-    let slug = slug::slugify(name);
-    let category = sqlx::query_as!(
+/// 辅助函数：创建分类和标签
+async fn seed_one_category(pool: &PgPool, name: &str) -> Result<Category> {
+    sqlx::query_as!(
         Category,
-        r#"
-            INSERT INTO categories (id, name, slug) VALUES ($1, $2, $3)
-            RETURNING id, name, slug, created_at, updated_at
-            "#,
+        r#"INSERT INTO categories (id, name, slug) VALUES ($1, $2, $3) RETURNING *"#,
         Uuid::new_v4(),
         name,
-        slug
+        slugify(name)
     )
     .fetch_one(pool)
     .await
-    .context(format!("Seeding category '{}' for post test failed", name))?;
-    Ok(category)
+    .map_err(Into::into)
 }
 
-// --- 辅助函数：在测试数据库中创建单个标签 ---
-async fn seed_one_tag_for_post_test(pool: &PgPool, name: &str) -> Result<Tag> {
-    // ... 实现与 tag_api_tests.rs 中 seed_one_tag 类似的逻辑 ...
-    let slug = slug::slugify(name);
-    let tag = sqlx::query_as!(
+async fn seed_one_tag(pool: &PgPool, name: &str) -> Result<Tag> {
+    sqlx::query_as!(
         Tag,
-        r#"
-        INSERT INTO tags (id, name, slug) VALUES ($1, $2, $3)
-        RETURNING id, name, slug, created_at, updated_at
-        "#,
+        r#"INSERT INTO tags (id, name, slug) VALUES ($1, $2, $3) RETURNING *"#,
         Uuid::new_v4(),
         name,
-        slug
+        slugify(name)
     )
     .fetch_one(pool)
     .await
-    .context(format!("Seeding tag '{}' for post test failed", name))?;
-    Ok(tag)
+    .map_err(Into::into)
 }
 
-// --- 测试分页用例 ---
-// 使用 #[sqlx::test] 宏
-// 它会自动处理数据库连接、事务和回滚
-#[sqlx::test]
-async fn test_list_posts_default_pagination(pool: PgPool) -> Result<()> {
-    // 1. 准备环境和数据
-    let app = setup_test_app(pool.clone()).await; // 这里 pool 需要clone
-    let total_seed_posts = 15; // 创建超过一页的数据
-    let seeded_posts = seed_posts(&pool, total_seed_posts).await?;
+// --- 帖子API集成测试 ---
 
-    // 2. 构造请求(无分页参数）
-    let request = Request::builder()
-        .uri("/posts") // 无查询参数
-        .body(Body::empty())?;
-
-    // 3.发送请求
-    let response = app.oneshot(request).await?;
-
-    // 4. 断言状态码
-    assert_eq!(response.status(), StatusCode::OK);
-
-    // 5. 解析响应体
-    let body_bytes = response
-        .into_body() // 类型是 impl hyper::body::Body
-        .collect() // // 调用 BodyExt::collect()，返回 Result<Collected<Bytes>, hyper::Error>
-        .await
-        .context("收集响应体失败")? // 处理 collect() 可能产生的错误
-        .to_bytes(); // 从 Collected<Bytes> 中获取 Bytes
-
-    let page_response: PaginatedResponse<PostDetailDto> = serde_json::from_slice(&body_bytes)
-        .context("无法将响应体反序列化为PaginatedResponse<PostDetailDto>")?;
-
-    // 6. 断言分页元数据
-    assert_eq!(page_response.total_items, total_seed_posts as i64); // 总数应等于我们插入的数量
-    assert_eq!(page_response.page, 1); // 默认页码应为1
-    assert_eq!(page_response.page_size, 10); // 默认每页大小应为 10
-    assert_eq!(page_response.total_pages, 2); // 15条数据，每页10条，应有 2 页
-    assert_eq!(page_response.items.len(), 10); // 第一页应有 10 条数据
-
-    // 7. 断言内容 - 检查第一页的数据是否是我们最新创建的10条
-    for i in 0..10 {
-        assert_eq!(page_response.items[i].id, seeded_posts[i].id);
-        assert_eq!(page_response.items[i].title, seeded_posts[i].title);
-    }
-
-    Ok(())
-}
+// == 创建帖子 (POST /posts)
 
 #[sqlx::test]
-async fn test_list_posts_specific_page_and_size(pool: PgPool) -> Result<()> {
-    // 1. 准备环境和数据
+async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
+    // 准备
     let app = setup_test_app(pool.clone()).await;
-    let total_seeded_posts = 25; // 假设每页 5 条，需要 5 页
-    let seeded_posts = seed_posts(&pool, total_seeded_posts).await?;
+    let (token, user_id) = register_and_login_new_user(&app).await?;
 
-    // 2. 构造请求（请求第 3 页，每页5条）
-    let request = Request::builder()
-        .uri("/posts?page=3&page_size=5")
-        .body(Body::empty())?;
-
-    // 3. 发送请求
-    let response = app.oneshot(request).await?;
-
-    // 4. 断言状态
-    assert_eq!(response.status(), StatusCode::OK);
-
-    // 5. 解析响应体
-    let body_bytes = response
-        .into_body()
-        .collect()
-        .await
-        .context("收集响应体失败")?
-        .to_bytes();
-
-    let page_response: PaginatedResponse<PostDetailDto> = serde_json::from_slice(&body_bytes)
-        .context("无法将响应体反序列化为PaginatedResponse<Post>")?;
-
-    // 6. 断言分页元数据
-    assert_eq!(page_response.total_items, total_seeded_posts as i64);
-    assert_eq!(page_response.page, 3);
-    assert_eq!(page_response.page_size, 5);
-    assert_eq!(page_response.total_pages, 5);
-    assert_eq!(page_response.items.len(), 5);
-
-    // 7. 断言内容 - 检查第 3 页的数据是否是我们创建的第 11 到 15 条 (索引 10 到 14)
-    for i in 0..5 {
-        let expected_index = 10 + i; // page 3, size 5 => offset 10
-        assert_eq!(page_response.items[i].id, seeded_posts[expected_index].id);
-        assert_eq!(
-            page_response.items[i].title,
-            seeded_posts[expected_index].title
-        );
-    }
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_list_posts_last_page_partial(pool: PgPool) -> Result<()> {
-    // 1. 准备环境和数据
-    let app = setup_test_app(pool.clone()).await;
-    let total_seeded_posts = 12; // 每页 5 条，最后一页只有 2 条
-    let seeded_posts = seed_posts(&pool, total_seeded_posts).await?;
-
-    // 2. 构造请求 (请求第 3 页，每页 5 条)
-    let request = Request::builder()
-        .uri("/posts?page=3&page_size=5")
-        .body(Body::empty())?;
-
-    // 3. 发送请求
-    let response = app.oneshot(request).await?;
-
-    // 4. 断言状态码
-    assert_eq!(response.status(), StatusCode::OK);
-
-    // 5. 解析响应体
-    let body_bytes = response
-        .into_body()
-        .collect()
-        .await
-        .context("收集响应体失败")?
-        .to_bytes();
-
-    let page_response: PaginatedResponse<PostDetailDto> = serde_json::from_slice(&body_bytes)
-        .context("无法将响应体反序列化为PaginatedResponse<Post>")?;
-
-    // 6. 断言分页元数据
-    assert_eq!(page_response.total_items, total_seeded_posts as i64);
-    assert_eq!(page_response.page, 3);
-    assert_eq!(page_response.page_size, 5);
-    assert_eq!(page_response.total_pages, 3); // 12 条数据，每页 5 条，应有 3 页
-    // 7. 断言最后一页的 item 数量
-    assert_eq!(page_response.items.len(), 2); // 最后一页只有 2 条
-
-    // 8. 断言内容 - 检查是否是最后 2 条数据 (索引 10, 11)
-    assert_eq!(page_response.items[0].id, seeded_posts[10].id);
-    assert_eq!(page_response.items[1].id, seeded_posts[11].id);
-
-    Ok(())
-}
-
-// --- 测试 POST /posts (创建帖子) 用例 ---
-#[sqlx::test]
-async fn test_create_post_valid_payload(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
     let payload = CreatePostPayload {
-        title: "新帖子标题".to_string(),
-        content: "这是新帖子的内容。".to_string(),
+        title: "一个由普通用户创建的帖子".to_string(),
+        content: "这是帖子的内容...".to_string(),
         category_ids: None,
         tag_ids: None,
     };
 
+    // 执行
     let request = Request::builder()
         .method(Method::POST)
         .uri("/posts")
-        .header("content-type", "application/json")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&payload)?))?;
-
     let response = app.oneshot(request).await?;
 
-    assert_eq!(
-        response.status(),
-        StatusCode::CREATED,
-        "预期状态码为 201 CREATED"
-    );
+    // 断言
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
-    let created_post: Post =
-        serde_json::from_slice(&body_bytes).context("无法将响应体反序列化为Post")?;
+    let created_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
 
-    assert_eq!(created_post.title, payload.title, "帖子标题不匹配");
-    assert_eq!(created_post.content, payload.content, "帖子内容不匹配");
-    assert!(!created_post.slug.is_empty(), "Slug 不应为空");
-    assert_eq!(
-        created_post.slug,
-        slug::slugify(&payload.title),
-        "Slug 生成不符合预期"
-    );
-    assert!(
-        created_post.published_at.is_none(),
-        "新帖子 published_at 应该为 None (草稿)"
-    );
+    assert_eq!(created_post.title, payload.title);
 
-    //直接从数据库验证
-    let db_post = sqlx::query_as!(
-        Post,
-        r#"
-        select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at
-        from posts
-        where id = $1
-        "#,
-        created_post.id
-    )
+    // 从数据库验证作者ID是否正确
+    let db_post = sqlx::query_as!(Post, "SELECT * FROM posts WHERE id = $1", created_post.id)
         .fetch_one(&pool)
         .await?;
-
-    assert_eq!(db_post.title, payload.title);
+    assert_eq!(db_post.author_id, Some(user_id));
 
     Ok(())
 }
 
 #[sqlx::test]
-async fn test_create_post_empty_title(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
+async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let (token, _user_id) = register_and_login_new_user(&app).await?;
+    let category = seed_one_category(&pool, "关联分类").await?;
+    let tag = seed_one_tag(&pool, "关联标签").await?;
 
     let payload = CreatePostPayload {
-        title: "".to_string(),
-        content: "一些内容。".to_string(),
-        category_ids: None,
-        tag_ids: None,
+        title: "带有关联的帖子".to_string(),
+        content: "内容...".to_string(),
+        category_ids: Some(vec![category.id]),
+        tag_ids: Some(vec![tag.id]),
     };
 
+    // 执行
     let request = Request::builder()
         .method(Method::POST)
         .uri("/posts")
-        .header("content-type", "application/json")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&payload)?))?;
-
     let response = app.oneshot(request).await?;
 
-    assert_eq!(
-        response.status(),
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "预期空标题返回错误状态码"
-    );
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_create_post_slug_conflict(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let title = "唯一的标题";
-
-    // 1. 先成功创建一个帖子
-    let _first_post = seed_one_post(&pool, title, "一些内容", false).await?;
-
-    // 2. 尝试创建另一个同名帖子（会导致 slug 冲突）
-    let payload_conflict = CreatePostPayload {
-        title: title.to_string(),
-        content: "不同的内容，但标题相同".to_string(),
-        category_ids: None,
-        tag_ids: None,
-    };
-
-    let request_conflict = Request::builder()
-        .method(Method::POST)
-        .uri("/posts")
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload_conflict)?))?;
-
-    let response_conflict = app.oneshot(request_conflict).await?;
-
-    // 检查 ApiError::IntoResponse 是否能将数据库唯一约束错误 (23505) 转换为合适的客户端错误
-    // 根据之前的 ApiError 实现，应该能匹配到 23505 并返回 BAD_REQUEST
-    assert_eq!(
-        response_conflict.status(),
-        StatusCode::BAD_REQUEST,
-        "预期 slug 冲突返回 BAD_REQUEST"
-    );
-
-    let body_bytes = response_conflict.into_body().collect().await?.to_bytes();
-    let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-    let error_msg = error_response["error"].as_str().unwrap_or("");
-    assert!(
-        error_msg.contains("记录已存在")
-            || error_msg.contains("Slug")
-            || error_msg.contains("constraint"),
-        "错误消息应指明唯一约束冲突"
-    );
-
-    Ok(())
-}
-
-// --- 测试 GET /posts/{id_or_slug} (获取单个帖子)
-#[sqlx::test]
-async fn test_get_post_by_id_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let seeded_post = seed_one_post(&pool, "获取测试标题ID", "获取测试内容ID", true).await?;
-
-    let request_uri = format!("/posts/{}", seeded_post.id);
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-
-    assert_eq!(response.status(), StatusCode::OK, "预期状态码为 200 OK");
+    // 断言
+    assert_eq!(response.status(), StatusCode::CREATED);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
-    let fetched_post: Post =
-        serde_json::from_slice(&body_bytes).context("无法将响应体反序列化为 Post")?;
+    let created_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
 
-    assert_eq!(fetched_post.id, seeded_post.id, "帖子 ID 不匹配");
-    assert_eq!(fetched_post.title, seeded_post.title, "帖子标题不匹配");
+    assert!(created_post.categories.is_some());
+    assert_eq!(created_post.categories.as_ref().unwrap().len(), 1);
+    assert_eq!(created_post.categories.as_ref().unwrap()[0].id, category.id);
+    assert!(created_post.tags.is_some());
+    assert_eq!(created_post.tags.as_ref().unwrap()[0].id, tag.id);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool).await;
+    let payload = CreatePostPayload {
+        title: "无Token帖子".into(),
+        content: "...".into(),
+        category_ids: None,
+        tag_ids: None,
+    };
+
+    // 执行
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/posts")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    Ok(())
+}
+
+// == 读取帖子 (GET /posts, GET /posts/{id})
+
+#[sqlx::test]
+async fn test_list_posts_pagination(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let (_token, user_id) = register_and_login_new_user(&app).await?;
+    for i in 0..15 {
+        seed_one_post(&pool, user_id, &format!("Post {}", i), true).await?;
+    }
+
+    // 执行: 请求第2页，每页5条
+    let request = Request::builder()
+        .uri("/posts?page=2&page_size=5")
+        .body(Body::empty())?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body_bytes = response.into_body().collect().await?.to_bytes();
+    let page: PaginatedResponse<PostDetailDto> = serde_json::from_slice(&body_bytes)?;
+
+    assert_eq!(page.total_items, 15);
+    assert_eq!(page.page, 2);
+    assert_eq!(page.page_size, 5);
+    assert_eq!(page.total_pages, 3);
+    assert_eq!(page.items.len(), 5);
 
     Ok(())
 }
 
 #[sqlx::test]
 async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
+    // 准备
     let app = setup_test_app(pool.clone()).await;
-    let seeded_post = seed_one_post(&pool, "获取测试标题ID", "获取测试内容ID", true).await?;
+    let (_token, user_id) = register_and_login_new_user(&app).await?;
+    let seeded_post = seed_one_post(&pool, user_id, "一个用于Slug测试的帖子", true).await?;
 
-    let request_uri = format!("/posts/{}", seeded_post.slug);
+    // 执行
     let request = Request::builder()
-        .method(Method::GET)
-        .uri(request_uri)
+        .uri(format!("/posts/{}", seeded_post.slug))
         .body(Body::empty())?;
-
     let response = app.oneshot(request).await?;
 
-    assert_eq!(response.status(), StatusCode::OK, "预期状态码为 200 OK");
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let fetched_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
-
-    assert_eq!(fetched_post.id, seeded_post.id, "帖子 ID 不匹配");
-    assert_eq!(fetched_post.slug, seeded_post.slug, "帖子 Slug 不匹配");
+    assert_eq!(fetched_post.id, seeded_post.id);
 
     Ok(())
 }
 
-#[sqlx::test]
-async fn test_get_post_by_id_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
-    let random_uuid = Uuid::new_v4(); // 一个不存在的 UUID
-
-    let request_uri = format!("/posts/{}", random_uuid);
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-    // Service 层返回 anyhow!("未找到...") 错误, ApiError 将其转换为 404
-    assert_eq!(
-        response.status(),
-        StatusCode::NOT_FOUND,
-        "预期帖子未找到返回 404"
-    );
-
-    // 检查错误消息
-    // let body_bytes = response.into_body().collect().await?.to_bytes();
-    // let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-    // assert!(error_response["error"].as_str().unwrap_or("").contains("未找到"));
-
-    Ok(())
-}
+// == 更新帖子 (PUT /posts/{id})
 
 #[sqlx::test]
-async fn test_get_post_by_slug_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
-    let non_existent_slug = "一个肯定不存在的slug-abcdef";
-
-    let request_uri = format!("/posts/{}", non_existent_slug);
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-
-    assert_eq!(
-        response.status(),
-        StatusCode::NOT_FOUND,
-        "预期帖子未找到返回 404"
-    );
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_get_post_by_unparseable_string_as_slug_not_found(pool: PgPool) -> Result<()> {
-    // 这个测试验证当传入一个既不是UUID也不是有效slug的字符串时，最终会作为slug查询失败
-    let app = setup_test_app(pool).await;
-    let gibberish_string = "这不是UUID也不是有效slug";
-
-    let request_uri = format!("/posts/{}", gibberish_string);
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-
-    // 因为 get_post_handler 中，Uuid::parse_str 失败会落入 Err(_) 分支，按 slug 查询
-    // 所以这里预期结果和按无效 slug 查询一样，是 404
-    assert_eq!(
-        response.status(),
-        StatusCode::NOT_FOUND,
-        "预期帖子未找到返回 404"
-    );
-    Ok(())
-}
-
-// --- 测试 PUT /posts/{id} (更新帖子) ---
-
-// 测试所有可更新字段都被成功更新的情况，包括发布状态
-#[sqlx::test]
-async fn test_update_post_full_success(pool: PgPool) -> Result<()> {
+async fn test_update_own_post_success(pool: PgPool) -> Result<()> {
+    // 准备
     let app = setup_test_app(pool.clone()).await;
-    let original_post = seed_one_post(&pool, "原始标题", "原始内容", false).await?;
+    let (token, user_id) = register_and_login_new_user(&app).await?;
+    let original_post = seed_one_post(&pool, user_id, "我的原始帖子", true).await?;
 
-    let now_for_publish = Utc::now();
-    let update_payload = UpdatePostPayload {
-        title: Some("更新后的标题".to_string()),
+    let payload = UpdatePostPayload {
+        title: Some("我的更新后的帖子标题".to_string()),
         content: Some("更新后的内容".to_string()),
-        slug: None,
-        published_at: Some(now_for_publish), // 显示发布
-        unpublish: false,                    // 明确不是撤稿 (或者依赖默认值)
-        category_ids: None,
-        tag_ids: None,
-    };
-
-    let request_uri = format!("/posts/{}", original_post.id);
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(request_uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&update_payload)?))?;
-
-    let response = app.oneshot(request).await?;
-
-    assert_eq!(response.status(), StatusCode::OK, "预期状态码为 200 OK");
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let updated_post_response: PostDetailDto =
-        serde_json::from_slice(&body_bytes).context("无法将响应体反序列化为 Post")?;
-
-    assert_eq!(updated_post_response.id, original_post.id);
-    assert_eq!(updated_post_response.title, "更新后的标题");
-    assert_eq!(updated_post_response.content, "更新后的内容");
-    assert_eq!(updated_post_response.slug, slug::slugify("更新后的标题")); // 验证 slug 是否被更新
-    assert!(
-        updated_post_response.published_at.is_some(),
-        "帖子应该已发布"
-    );
-    // 比较时间戳时要注意可能的微秒差异，这里简单比较日期和小时分钟秒
-    assert_eq!(
-        updated_post_response.published_at.unwrap().trunc_subsecs(0),
-        now_for_publish.trunc_subsecs(0)
-    );
-    assert!(
-        updated_post_response.published_at > Option::from(original_post.updated_at),
-        "updated_at 应该已更新"
-    );
-
-    // 直接从数据库验证
-    let db_post = sqlx::query_as!(
-        Post,
-        r#"
-        select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at
-        from posts
-        where id = $1
-        "#,
-        original_post.id
-    )
-        .fetch_one(&pool)
-        .await?;
-
-    assert_eq!(db_post.title, "更新后的标题");
-    assert_eq!(db_post.slug, slug::slugify("更新后的标题"));
-    assert!(db_post.published_at.is_some());
-
-    Ok(())
-}
-
-// 测试只更新部分字段（例如标题）的情况
-#[sqlx::test]
-async fn test_update_post_partial_title_only(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let original_post = seed_one_post(&pool, "部分更新原始标题", "部分更新原始内容", true).await?; // 初始已发布
-
-    let update_payload = UpdatePostPayload {
-        title: Some("部分更新后的标题".to_string()),
-        content: None,      // 不更新内容
-        slug: None,         // 不显式更新 slug
-        published_at: None, // 不改变发布状态
-        unpublish: false,   // 明确不是撤稿 (或者依赖默认值)
-        category_ids: None,
-        tag_ids: None,
-    };
-
-    let request_uri = format!("/posts/{}", original_post.id);
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(request_uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&update_payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let updated_post_response: PostDetailDto = serde_json::from_slice(&body_bytes)?;
-
-    assert_eq!(updated_post_response.title, "部分更新后的标题");
-    assert_eq!(
-        updated_post_response.content, original_post.content,
-        "内容不应改变"
-    ); // 验证内容未变
-
-    let expected_slug = slug::slugify("部分更新后的标题");
-
-    assert_eq!(
-        updated_post_response.slug, expected_slug,
-        "Slug 应根据新标题重新生成"
-    );
-    assert_eq!(
-        updated_post_response.published_at, original_post.published_at,
-        "发布状态不应改变"
-    );
-    // assert!(updated_post_response.updated_at > original_post.updated_at);
-
-    Ok(())
-}
-
-// 专门测试将 published_at 设置为 Some(None) (JSON 中是 null) 来撤销发布的功能
-#[sqlx::test]
-async fn test_update_post_unpublish(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let original_post = seed_one_post(&pool, "待撤稿标题", "待撤稿内容", true).await?; // 初始已发布
-    assert!(original_post.published_at.is_some());
-
-    let update_payload = UpdatePostPayload {
-        title: None,
-        content: None,
-        slug: None,
-        published_at: None, // 显式设置为 null，即撤稿
-        unpublish: true,    // 明确不是撤稿 (或者依赖默认值)
-        category_ids: None,
-        tag_ids: None,
-    };
-
-    let request_uri = format!("/posts/{}", original_post.id);
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(request_uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&update_payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let updated_post_response: PostDetailDto = serde_json::from_slice(&body_bytes)?;
-
-    assert!(
-        updated_post_response.published_at.is_none(),
-        "帖子应该已撤稿 (published_at 为 None)"
-    );
-    assert_eq!(updated_post_response.title, original_post.title); // 其他字段不应改变
-    // assert!(updated_post_response.updated_at > original_post.updated_at);
-
-    Ok(())
-}
-
-// 测试尝试更新一个不存在的帖子 ID 时，应返回 404。
-#[sqlx::test]
-async fn test_update_post_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
-    let non_existent_uuid = Uuid::new_v4();
-    let update_payload = UpdatePostPayload {
-        title: Some("任意标题".to_string()),
         ..Default::default()
-    }; // 使用 Default 填充 Option
-
-    let request_uri = format!("/posts/{}", non_existent_uuid);
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(request_uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&update_payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    // 预期 Service 层 get_by_id 返回 None，然后 ok_or_else 产生 "未找到" 错误, ApiError 映射为 404
-    assert_eq!(
-        response.status(),
-        StatusCode::NOT_FOUND,
-        "预期更新不存在的帖子返回 404"
-    );
-    Ok(())
-}
-
-// 测试当提供的更新数据本身不合法时（例如标题为空字符串），API 应如何响应。
-#[sqlx::test]
-async fn test_update_post_invalid_payload_empty_title(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let original_post = seed_one_post(&pool, "标题置空测试", "内容", false).await?;
-
-    let update_payload = UpdatePostPayload {
-        title: Some("".to_string()), // 尝试将标题设置为空
-        content: None,
-        slug: None,
-        published_at: None,
-        unpublish: false, // 明确不是撤稿 (或者依赖默认值)
-        category_ids: None,
-        tag_ids: None,
     };
 
-    let request_uri = format!("/posts/{}", original_post.id);
+    // 执行
     let request = Request::builder()
         .method(Method::PUT)
-        .uri(request_uri)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&update_payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    // 预期 Service 层验证逻辑返回 anyhow!("标题不能为空")
-    // 需要 ApiError::IntoResponse 能够处理这类验证错误并返回 400 或 422
-    // 目前的 ApiError 对于非特定 downcast 错误可能返回 500，或者如果 anyhow 错误消息包含“不能为空”，可能被我们的简单字符串匹配捕获
-    // 这是一个可以改进 ApiError 处理的地方
-    let status = response.status();
-    assert!(
-        status == StatusCode::BAD_REQUEST || status == StatusCode::INTERNAL_SERVER_ERROR,
-        "预期空标题更新返回客户端错误 (400/422) 或当前为(500)"
-    );
-    if status == StatusCode::BAD_REQUEST || status == StatusCode::UNPROCESSABLE_ENTITY {
-        // 更理想的状态码
-        let body_bytes = response.into_body().collect().await?.to_bytes();
-        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-        assert!(
-            error_response["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("标题不能为空")
-        );
-    }
-    Ok(())
-}
-
-// --- 测试 DELETE /posts/{id} (删除帖子) ---
-// 测试成功删除和尝试删除不存在的帖子这两种主要情况
-#[sqlx::test]
-async fn test_delete_post_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let seeded_post = seed_one_post(&pool, "待删除的帖子", "一些内容", true).await?;
-    let post_id_to_delete = seeded_post.id;
-
-    // 1. 构造删除请求
-    let request_uri = format!("/posts/{}", post_id_to_delete);
-    let request = Request::builder()
-        .method(Method::DELETE)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    // 2. 发送请求
-    let response = app.clone().oneshot(request).await?; // Clone app for potential reuse
-
-    // 3. 断言状态码
-    // 成功删除通常返回 204 No Content，表示操作成功，但响应体中没有内容
-    assert_eq!(
-        response.status(),
-        StatusCode::NO_CONTENT,
-        "预期删除成功返回 204 NO CONTENT"
-    );
-
-    // 4. 验证数据库中帖子确实已被删除
-    let delete_post_in_db = sqlx::query_as!(
-        Post,
-        r#"
-        select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at
-        from posts
-        where id = $1
-        "#,
-        post_id_to_delete
-    )
-        .fetch_optional(&pool) // 使用 fetch_optional 因为我们期望它不存在
-        .await
-        .context("删除后查询帖子失败")?;
-
-    assert!(delete_post_in_db.is_none(), "贼子在数据库中应该已被删除");
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_delete_post_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
-    let non_existent_uuid = Uuid::new_v4(); // 一个肯定不存在的UUID
-
-    let request_uri = format!("/posts/{}", non_existent_uuid);
-    let request = Request::builder()
-        .method(Method::DELETE)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-
-    // 断言状态码
-    // 预期 Service 层或 Repository 层返回 "未找到" 错误, ApiError 将其映射为 404
-    // 在 PostRepository::delete 中针对 rows_affected == 0 的情况使用了 anyhow::bail!("...未找到记录...")
-    // ApiError::IntoResponse 中的字符串匹配逻辑应该能捕获这个并返回 404
-    assert_eq!(
-        response.status(),
-        StatusCode::NOT_FOUND,
-        "预期删除不存在的帖子返回 404 NOT FOUND"
-    );
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_delete_post_invalid_uuid_format(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool).await;
-    let invalid_uuid_string = "this-is-not-a-uuid";
-
-    let request_uri = format!("/posts/{}", invalid_uuid_string);
-    let request = Request::builder()
-        .method(Method::DELETE)
-        .uri(request_uri)
-        .body(Body::empty())?;
-
-    let response = app.oneshot(request).await?;
-
-    // 断言状态码
-    // delete_post_handler 的 Path(id) 参数类型是 Path<Uuid>，
-    // Axum 的路径提取器在解析 "this-is-not-a-uuid" 到 Uuid 时会失败。
-    // 这种路径参数解析失败通常会导致 Axum 自动返回 400 Bad Request。
-    let status = response.status();
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "预期删除无效UUID格式的帖子返回 400 Bad Request, 实际为：{}",
-        status
-    );
-    Ok(())
-}
-
-// 测试创建帖子时关联分类和标签
-#[sqlx::test]
-async fn test_create_post_with_categories_and_tags(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let category1 = seed_one_category_for_post_test(&pool, "测试分类1").await?;
-    let tag1 = seed_one_tag_for_post_test(&pool, "测试标签1").await?;
-    let tag2 = seed_one_tag_for_post_test(&pool, "测试标签2").await?;
-
-    let payload = CreatePostPayload {
-        title: "带关联的帖子".to_string(),
-        content: "内容...".to_string(),
-        category_ids: Some(vec![category1.id]),
-        tag_ids: Some(vec![tag1.id, tag2.id]),
-    };
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/posts")
-        .header("content-type", "application/json")
+        .uri(format!("/posts/{}", original_post.id))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&payload)?))?;
-
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::CREATED);
 
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let post_detail: PostDetailDto = serde_json::from_slice(&body_bytes)?;
-
-    assert_eq!(post_detail.title, payload.title);
-    assert!(post_detail.categories.is_some());
-    let categories = post_detail.categories.unwrap();
-    assert_eq!(categories.len(), 1);
-    assert_eq!(categories[0].id, category1.id);
-    assert_eq!(categories[0].name, category1.name);
-
-    assert!(post_detail.tags.is_some());
-    let tags = post_detail.tags.unwrap();
-    assert_eq!(tags.len(), 2);
-    assert!(tags.iter().any(|t| t.id == tag1.id && t.name == tag1.name));
-    assert!(tags.iter().any(|t| t.id == tag2.id && t.name == tag2.name));
-
-    // 直接查询中间表进行验证
-    let count_cat_assoc = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM post_categories WHERE post_id = $1 AND category_id = $2",
-        post_detail.id,
-        category1.id
-    )
-    .fetch_one(&pool)
-    .await?;
-    assert_eq!(count_cat_assoc.unwrap_or(0), 1);
-
-    Ok(())
-}
-
-// 测试获取单个帖子时包含关联信息
-#[sqlx::test]
-async fn test_get_post_with_details(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    // 1. 创建分类和标签
-    let category1 = seed_one_category_for_post_test(&pool, "详情分类").await?;
-    let tag1 = seed_one_tag_for_post_test(&pool, "详情标签").await?;
-
-    // 2. 创建一个帖子，并通过 PostRepository 直接关联
-    let post_title = "帖子详情测试";
-    let post_slug = slug::slugify(post_title);
-    let basic_post = sqlx::query_as!(
-        Post,
-        r#"INSERT INTO posts (id, slug, title, content) VALUES ($1, $2, $3, $4)
-           RETURNING id, slug, title, content, created_at, updated_at, published_at"#,
-        Uuid::new_v4(),
-        post_slug,
-        post_title,
-        "内容"
-    )
-    .fetch_one(&pool)
-    .await?;
-
-    sqlx::query!(
-        "INSERT INTO post_categories (post_id, category_id) VALUES ($1, $2)",
-        basic_post.id,
-        category1.id
-    )
-    .execute(&pool)
-    .await?;
-    sqlx::query!(
-        "INSERT INTO post_tags (post_id, tag_id) VALUES ($1, $2)",
-        basic_post.id,
-        tag1.id
-    )
-    .execute(&pool)
-    .await?;
-
-    // 3. 发送 GET 请求
-    let request = Request::builder()
-        .uri(format!("/posts/{}", basic_post.id))
-        .body(Body::empty())?;
-    let response = app.oneshot(request).await?;
+    // 断言
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
-    let post_detail: PostDetailDto = serde_json::from_slice(&body_bytes)?;
+    let updated_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
 
-    assert_eq!(post_detail.id, basic_post.id);
-    assert!(post_detail.categories.is_some());
-    assert_eq!(post_detail.categories.as_ref().unwrap().len(), 1);
-    assert_eq!(post_detail.categories.as_ref().unwrap()[0].id, category1.id);
-    assert!(post_detail.tags.is_some());
-    assert_eq!(post_detail.tags.as_ref().unwrap().len(), 1);
-    assert_eq!(post_detail.tags.as_ref().unwrap()[0].id, tag1.id);
+    assert_eq!(updated_post.title, payload.title.unwrap());
+    assert_eq!(updated_post.content, payload.content.unwrap());
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_update_post_not_owner_fails(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    // 用户A (帖子所有者)
+    let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
+    let post_to_update = seed_one_post(&pool, owner_id, "一篇不让别人改的帖子", true).await?;
+    // 用户B (非所有者，普通用户)
+    let (attacker_token, _attacker_id) = register_and_login_new_user(&app).await?;
+
+    let payload = UpdatePostPayload {
+        title: Some("恶意修改".to_string()),
+        ..Default::default()
+    };
+
+    // 执行: 用户B尝试修改用户A的帖子
+    let request = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("/posts/{}", post_to_update.id))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", attacker_token))
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_update_post_as_editor_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    // 用户A (帖子所有者)
+    let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
+    let post_to_update = seed_one_post(&pool, owner_id, "一篇编辑可以改的帖子", true).await?;
+    // 用户B (编辑)
+    // 注意：这要求 'editor' 角色和 'post:edit_any' 权限已通过迁移脚本 seeding
+    let editor = seed_user_with_role(&pool, "editor_user", "editor").await?;
+    let editor_token = get_token_for_user(&app, &editor.username, "StrongPassword123!").await?;
+
+    let payload = UpdatePostPayload {
+        title: Some("由编辑修改".to_string()),
+        ..Default::default()
+    };
+
+    // 执行: 编辑用户尝试修改用户A的帖子
+    let request = Request::builder()
+        .method(Method::PUT)
+        .uri(format!("/posts/{}", post_to_update.id))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", editor_token))
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
+
+    Ok(())
+}
+
+// == 删除帖子 (DELETE /posts/{id})
+
+#[sqlx::test]
+async fn test_delete_own_post_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let (token, user_id) = register_and_login_new_user(&app).await?;
+    let post_to_delete = seed_one_post(&pool, user_id, "一篇待删除的帖子", true).await?;
+
+    // 执行
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/posts/{}", post_to_delete.id))
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    // 从数据库验证帖子已被删除
+    let count = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM posts WHERE id = $1",
+        post_to_delete.id
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(count.unwrap_or(0), 0);
+
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_delete_post_not_owner_fails(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
+    let post_to_delete = seed_one_post(&pool, owner_id, "不让他人删除的帖子", true).await?;
+    let (attacker_token, _attacker_id) = register_and_login_new_user(&app).await?;
+
+    // 执行: 用户B尝试删除用户A的帖子
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/posts/{}", post_to_delete.id))
+        .header("Authorization", format!("Bearer {}", attacker_token))
+        .body(Body::empty())?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     Ok(())
 }

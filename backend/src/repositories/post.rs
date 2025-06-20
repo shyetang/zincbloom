@@ -10,7 +10,12 @@ use uuid::Uuid;
 #[async_trait]
 pub trait PostRepository: Send + Sync {
     // Send + Sync 是因为要在async Axum中共享
-    async fn create(&self, payload: &CreatePostPayload, slug: &str) -> Result<Post>;
+    async fn create(
+        &self,
+        author_id: Uuid,
+        payload: &CreatePostPayload,
+        slug: &str,
+    ) -> Result<Post>;
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Post>>;
     async fn get_by_slug(&self, slug: &str) -> Result<Option<Post>>;
     async fn list(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)>;
@@ -31,6 +36,9 @@ pub trait PostRepository: Send + Sync {
     // 暂时不实现，但作为未来获取关联信息的占位
     // async fn get_category_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
     // async fn get_tag_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
+    
+    // 获取帖子的作者id
+    async fn get_author_id(&self,post_id: Uuid)->Result<Option<Uuid>>;
 }
 
 // Postgres的具体实现
@@ -113,7 +121,12 @@ impl PostgresPostRepository {
 
 #[async_trait]
 impl PostRepository for PostgresPostRepository {
-    async fn create(&self, payload: &CreatePostPayload, slug: &str) -> Result<Post> {
+    async fn create(
+        &self,
+        author_id: Uuid,
+        payload: &CreatePostPayload,
+        slug: &str,
+    ) -> Result<Post> {
         let post_id = Uuid::new_v4();
         let now = Utc::now();
 
@@ -128,9 +141,9 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            insert into posts (id,slug,title,content,created_at,updated_at,published_at)
-            values ($1,$2,$3,$4,$5,$6,$7)
-            returning id,slug,title,content,created_at,updated_at,published_at
+            insert into posts (id,slug,title,content,created_at,updated_at,published_at,author_id)
+            values ($1,$2,$3,$4,$5,$6,$7,$8)
+            returning id,slug,title,content,created_at,updated_at,published_at,author_id
             "#,
             post_id,
             slug,
@@ -138,7 +151,8 @@ impl PostRepository for PostgresPostRepository {
             &payload.content,
             now,
             now,
-            None::<DateTime<Utc>>
+            None::<DateTime<Utc>>,
+            author_id
         )
         .fetch_one(&mut *txn) // 在事务中执行
         .await
@@ -169,7 +183,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at from posts where id = $1
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id from posts where id = $1
             "#,
             id
         )
@@ -183,7 +197,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at 
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id
             from posts 
             where slug = $1
             "#,
@@ -200,7 +214,7 @@ impl PostRepository for PostgresPostRepository {
         let posts = sqlx::query_as!(
             Post,
             r#"
-            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at 
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id 
             FROM posts 
             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 过滤已发布的
             ORDER BY created_at DESC -- 或者 ORDER BY published_at DESC
@@ -287,7 +301,7 @@ impl PostRepository for PostgresPostRepository {
             update posts
             set title = $1,content = $2,slug = $3,updated_at = $4,published_at = $5
             where id = $6
-            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at
+            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id
             "#,
             title_to_update,
             content_to_update,
@@ -382,5 +396,16 @@ impl PostRepository for PostgresPostRepository {
         .context(format!("Failed to fetch tags for post {}", post_id))?;
 
         Ok(tags)
+    }
+
+    async fn get_author_id(&self, post_id: Uuid) -> Result<Option<Uuid>> {
+        let result = sqlx::query!(
+            "select author_id from posts where id = $1",
+            post_id
+        )
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("从数据库获取 Post id 为 {} 的 author id失败",post_id))?;
+        Ok(result.and_then(|record| record.author_id))
     }
 }

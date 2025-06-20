@@ -10,8 +10,8 @@ pub struct Post {
     pub slug: String,
     pub title: String,
     pub content: String,
+    pub author_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>, // 使用Option表示文章可能为草稿状态
 }
-

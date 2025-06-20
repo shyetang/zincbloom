@@ -7,12 +7,17 @@ use axum::{
     response::IntoResponse,
 };
 use uuid::Uuid;
+use crate::auth::AuthUser;
 
 /// 创建新标签的 Handler
 pub async fn create_tag_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,         // 从应用状态中提取服务实例
     Json(payload): Json<CreateTagPayload>, // 从请求体中解析 JSON 数据到 CreateTagPayload
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
+    
     // 返回值可以是任何实现了 IntoResponse 的类型，或者 ApiError
     tracing::info!("接收到创建标签请求：{:?}", payload);
 
@@ -61,10 +66,14 @@ pub async fn get_tag_handler(
 
 /// 更新标签的 Handler
 pub async fn update_tag_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateTagPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
+    
     tracing::info!("接收到更新标签请求：ID：{},Payload: {:?}", id, payload);
     let updated_tag = state.tag_service.update_tag(id, payload).await?;
     tracing::info!("标签更新成功：{:?}", updated_tag);
@@ -73,9 +82,13 @@ pub async fn update_tag_handler(
 }
 
 pub async fn delete_tag_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
+    
     tracing::info!("接收到删除标签请求：ID: {}", id);
     state.tag_service.delete_tag(id).await?;
     tracing::info!("标签删除成功：ID: {}", id);

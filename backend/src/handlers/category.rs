@@ -7,13 +7,17 @@ use axum::{
 use crate::api_error::ApiError;
 use crate::handlers::AppState;
 use uuid::Uuid;
+use crate::auth::AuthUser;
 use crate::dtos::category::{CreateCategoryPayload, UpdateCategoryPayload};
 
 /// 创建新分类的 Handler
 pub async fn create_category_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Json(payload): Json<CreateCategoryPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
     tracing::info!("接收到创建分类请求：{:?}", payload);
 
     // 调用 CategoryService 的create_category方法
@@ -60,10 +64,14 @@ pub async fn get_category_handler(
 
 /// 更新分类的 Handler
 pub async fn update_category_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateCategoryPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
+    
     tracing::info!("接收到更新分类请求：ID:{},Payload:{:?}", id, payload);
     let updated_category = state.category_service.update_category(id, payload).await?;
     tracing::info!("分类更新成功: {:?}", updated_category);
@@ -73,9 +81,13 @@ pub async fn update_category_handler(
 
 /// 删除分类的 Handler
 pub async fn delete_category_handler(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查
+    auth_user.require_permission("category:manage")?;
+    
     tracing::info!("接收到删除分类请求： ID:{}", id);
     state.category_service.delete_category(id).await?;
     tracing::info!("分类删除成功： ID:{}", id);
