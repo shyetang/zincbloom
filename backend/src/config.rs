@@ -14,13 +14,13 @@ pub struct EmailConfig {
 // 认证相关配置结构体
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthConfig {
-    pub jwt_secret: String,    // JWT 签名密钥
-    pub jwt_issuer: String,    // JWT 签发者
-    pub jwt_audience: String,  // JWT 受众
+    pub jwt_secret: String,               // JWT 签名密钥
+    pub jwt_issuer: String,               // JWT 签发者
+    pub jwt_audience: String,             // JWT 受众
     pub access_token_expiry_minutes: i64, // Access Token 过期时间 分钟
     pub refresh_token_expiry_days: i64,   // Refresh Token 过期时间 天
-    pub max_login_failures: u32,    // 允许的最大登录失败次数
-    pub lockout_duration_seconds: i64,  // 账户锁定时长 秒
+    pub max_login_failures: u32,          // 允许的最大登录失败次数
+    pub lockout_duration_seconds: i64,    // 账户锁定时长 秒
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -75,7 +75,7 @@ impl AppConfig {
             //       APP_DATABASE__URL=postgres://... 会设置 database.url
             .add_source(Environment::with_prefix("APP").separator("__"))
             // (可选) 从配置文件加载
-            .add_source(File::with_name("config/default").required(false)) // 例如 config/default.toml
+            .add_source(File::with_name("config/default.toml").required(false)) // 例如 config/default.toml
             // .add_source(File::with_name("config/production").required(false)) // 例如 config/production.toml
             ;
 

@@ -14,8 +14,8 @@ pub struct User {
     pub hashed_password: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub email_verified_at: Option<DateTime<Utc>>,
 }
-
 
 // 用于API响应的用户公开信息结构体，不包含密码等敏感数据
 #[derive(Debug, Serialize, Deserialize, Clone)]

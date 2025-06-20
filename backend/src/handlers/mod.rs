@@ -19,13 +19,25 @@ pub use tag::{
     create_tag_handler, delete_tag_handler, get_tag_handler, list_tags_handler, update_tag_handler,
 };
 
-pub use admin::{create_permission_handler, create_role_handler, delete_permission_handler, delete_role_handler, list_permissions_handler, list_roles_handler, list_users_handler, set_role_permissions_handler, set_user_roles_handler, update_permission_handler, update_role_handler};
+pub use admin::{
+    create_permission_handler, create_role_handler, delete_permission_handler, delete_role_handler,
+    list_permissions_handler, list_roles_handler, list_users_handler, set_role_permissions_handler,
+    set_user_roles_handler, update_permission_handler, update_role_handler,
+};
 
-pub use auth::{forgot_password_handler, login_handler, register_handler, reset_password_handler, verify_email_handler};
+pub use auth::{
+    forgot_password_handler, login_handler, refresh_token_handler, register_handler,
+    reset_password_handler, verify_email_handler,
+};
 
-pub use user::{change_my_password_handler, delete_my_account_handler, get_my_profile_handler, update_my_profile_handler};
+pub use user::{
+    change_my_password_handler, delete_my_account_handler, get_my_profile_handler,
+    update_my_profile_handler,
+};
 
-use crate::services::{AdminService, AuthService, CategoryService, PostService, TagService, UserService};
+use crate::services::{
+    AdminService, AuthService, CategoryService, PostService, TagService, UserService,
+};
 
 use std::sync::Arc;
 

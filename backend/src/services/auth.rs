@@ -2,18 +2,24 @@ use crate::config::AppConfig;
 use crate::dtos::auth::ResetPasswordPayload;
 use crate::dtos::{UserLoginPayload, UserRegistrationPayload};
 use crate::models::{User, UserPublic};
-use crate::repositories::{LoginAttemptRepository, OneTimeTokenRepository, RoleRepository, UserRepository};
+use crate::repositories::{
+    LoginAttemptRepository, OneTimeTokenRepository, RoleRepository, UserRepository,
+};
 use crate::services::EmailService;
 use crate::utils::{hash_password, validate_password_strength, verify_password};
 use anyhow::{anyhow, Context, Result};
-use blake3::hash;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tracing;
+use uuid::Uuid;
+
+// --- 用于保证token唯一性的静态原子计数器 ---
+static TOKEN_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 // JWT Claims 结构体，定义 Token 中包含的数据
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -21,6 +27,7 @@ pub struct Claims {
     pub sub: String,              // Subject (通常是用户ID)
     pub username: String,         // 用户名
     pub exp: usize,               // Expiration timestamp (Unix时间戳，秒)
+    pub jti: String,              // JWT ID，确保唯一性
     pub roles: Vec<String>,       // 角色名称列表
     pub permissions: Vec<String>, // 用户拥有的权限名称列表
 }
@@ -39,15 +46,14 @@ pub struct AuthService {
     login_attempt_repo: Arc<dyn LoginAttemptRepository>,
     one_time_token_repo: Arc<dyn OneTimeTokenRepository>,
     email_service: Arc<EmailService>,
-    access_token_secret: String,        // 用于签名和验证 token 的密钥
-    jwt_issuer: String,                 // JWT 签发者
-    jwt_audience: String,               // JWT 受众
-    access_token_expiry_minutes: i64,   // Access token 的有效期（分钟）
-    refresh_token_expiry_days: i64,     // Refresh token 的有效期（天）
-    max_login_failures: u32,            // 最大尝试登录失败次数
-    lockout_duration_seconds: i64,      // 锁定登录时间
+    access_token_secret: String,      // 用于签名和验证 token 的密钥
+    jwt_issuer: String,               // JWT 签发者
+    jwt_audience: String,             // JWT 受众
+    access_token_expiry_minutes: i64, // Access token 的有效期（分钟）
+    refresh_token_expiry_days: i64,   // Refresh token 的有效期（天）
+    max_login_failures: u32,          // 最大尝试登录失败次数
+    lockout_duration_seconds: i64,    // 锁定登录时间
 }
-
 
 // 生成一个长而随机的字符串作为 Refresh Token
 fn generate_refresh_token() -> String {
@@ -67,11 +73,21 @@ fn hash_token(token: &str) -> String {
 
 // 生成一次性令牌
 fn generate_one_time_token() -> String {
-    rand::rng()
+    // 1. 获取一个唯一的计数值
+    let counter = TOKEN_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    // 2. 获取高精度时间戳
+    let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // 3. 生成随机数部分
+    let random_part: String = rand::rng()
         .sample_iter(&Alphanumeric)
-        .take(48) // 64位长度
+        .take(24) // 24位长度
         .map(char::from)
-        .collect()
+        .collect();
+
+    // 拼接 UUID 的一部分来保证在并发测试中的唯一性
+    format!("{}-{}-{}", timestamp, counter, random_part)
 }
 
 impl AuthService {
@@ -103,8 +119,15 @@ impl AuthService {
     // 用户注册服务方法
     pub async fn register_user(&self, payload: UserRegistrationPayload) -> Result<UserPublic> {
         // 验证密码策略
-        validate_password_strength(&payload.password)
-            .context("用户注册时密码强度验证失败")?;
+        validate_password_strength(&payload.password).context("用户注册时密码强度验证失败")?;
+
+        // 开启事务
+        let mut tx = self
+            .user_repo
+            .get_pool()
+            .begin()
+            .await
+            .context("开启注册事务失败")?;
 
         if self
             .user_repo
@@ -125,13 +148,13 @@ impl AuthService {
         let hashed_password = hash_password(&payload.password).context("注册时，哈希密码失败")?;
         let new_user = self
             .user_repo
-            .create(&payload, &hashed_password)
+            .create_in_tx(&mut tx, &payload, &hashed_password)
             .await?;
 
         match self.role_repo.find_by_name("user").await {
             Ok(Some(user_role)) => {
                 self.user_repo
-                    .assign_roles_to_user(new_user.id, &[user_role.id])
+                    .assign_roles_to_user_in_tx(&mut tx, new_user.id, &[user_role.id])
                     .await
                     .context(format!("为用户 '{}' 分配默认角色失败", new_user.username))?;
                 tracing::info!("成功为新用户 {} 分配 'user' 角色", new_user.username);
@@ -151,11 +174,20 @@ impl AuthService {
         let expires_at = Utc::now() + Duration::hours(24);
 
         self.one_time_token_repo
-            .store_token(new_user.id, "email_verification", &token_hash, expires_at)
+            .store_token_in_tx(
+                &mut tx,
+                new_user.id,
+                &token_hash,
+                "email_verification",
+                expires_at,
+            )
             .await?;
 
         // 准备邮件内容
-        let verification_link = format!("http://localhost:3000/verify-email?token={}", verification_token);   // URL应来自配置
+        let verification_link = format!(
+            "http://localhost:3000/verify-email?token={}",
+            verification_token
+        ); // URL应来自配置
         let email_subject = "欢迎来到我的博客 - 请验证您的邮箱地址";
         let email_body = format!(
             "<p>您好, {},</p><p>感谢您的注册！请点击下面的链接来验证您的邮箱地址：</p><p><a href=\"{}\">验证邮箱</a></p><p>此链接将在24小时后失效。</p>",
@@ -163,7 +195,14 @@ impl AuthService {
         );
 
         // 发送邮件
-        self.email_service.send_email(&new_user.email, email_subject, &email_body).await?;
+        self.email_service
+            .send_email(&new_user.email, email_subject, &email_body)
+            .await?;
+
+        // 提交事务
+        tx.commit().await.context("提交注册事务失败")?;
+
+        tracing::info!("用户 {} 注册成功并提交事务", new_user.username);
 
         Ok(UserPublic {
             id: new_user.id,
@@ -179,7 +218,8 @@ impl AuthService {
         let token_hash = hash_token(token);
 
         // 查找并消费令牌
-        let user_id = self.one_time_token_repo
+        let user_id = self
+            .one_time_token_repo
             .find_and_consume_token(&token_hash, "email_verification")
             .await?
             .ok_or_else(|| anyhow!("邮箱验证失败：无效或已过期的令牌"))?;
@@ -271,6 +311,7 @@ impl AuthService {
             sub: user.id.to_string(),
             username: user.username.clone(),
             exp: access_token_exp.timestamp() as usize,
+            jti: Uuid::new_v4().to_string(),
             roles: roles.into_iter().map(|r| r.name).collect(),
             permissions: permissions.into_iter().map(|p| p.name).collect(),
         };
@@ -279,7 +320,7 @@ impl AuthService {
             &claims,
             &EncodingKey::from_secret(self.access_token_secret.as_ref()),
         )
-            .context("生成 Access Token 失败")?;
+        .context("生成 Access Token 失败")?;
 
         // 生成 Refresh Token，并存储
         let refresh_token = generate_refresh_token();
@@ -307,10 +348,10 @@ impl AuthService {
             &DecodingKey::from_secret(self.access_token_secret.as_ref()),
             &validation,
         )
-            .map_err(|e| {
-                tracing::warn!("Token 验证失败: {}, Token: '{}'", e, token);
-                anyhow!("无效或过期的 Token: {}", e)
-            })
+        .map_err(|e| {
+            tracing::warn!("Token 验证失败: {}, Token: '{}'", e, token);
+            anyhow!("无效或过期的 Token: {}", e)
+        })
     }
 
     // 检查账户是否被锁定
@@ -336,7 +377,9 @@ impl AuthService {
 
         if failure_count as u32 >= self.max_login_failures {
             let expires_at = Utc::now() + Duration::seconds(self.lockout_duration_seconds);
-            self.login_attempt_repo.set_lockout(username, expires_at).await?;
+            self.login_attempt_repo
+                .set_lockout(username, expires_at)
+                .await?;
             tracing::warn!("用户 {} 因登录失败次数过多已被锁定", username);
         }
         Ok(())
@@ -357,7 +400,7 @@ impl AuthService {
                 tracing::warn!("收到一个不存在的邮箱 {} 的密码重置请求，静默处理。", email);
                 return Ok(());
             }
-            Some(user) => user
+            Some(user) => user,
         };
 
         // 生成并存储一次性重置token
@@ -377,7 +420,9 @@ impl AuthService {
             user.username, reset_link
         );
 
-        self.email_service.send_email(&user.email, email_subject, &email_body).await
+        self.email_service
+            .send_email(&user.email, email_subject, &email_body)
+            .await
     }
 
     // 重置密码
@@ -390,16 +435,21 @@ impl AuthService {
 
         // 验证并消费重置令牌
         let token_hash = hash_token(&payload.token);
-        let user_id = self.one_time_token_repo
+        let user_id = self
+            .one_time_token_repo
             .find_and_consume_token(&token_hash, "password_reset")
             .await?
             .ok_or_else(|| anyhow!("密码重置失败：无效、已过期或已使用的令牌"))?;
 
         // 哈希新密码并更新到数据库
         let new_hashed_password = hash_token(&payload.new_password);
-        self.user_repo.update_password(user_id, &new_hashed_password).await?;
+        self.user_repo
+            .update_password(user_id, &new_hashed_password)
+            .await?;
         // 密码重置后，让该用户所有其他设备上的会话都失效
-        self.user_repo.delete_all_refresh_token_for_user(user_id).await?;
+        self.user_repo
+            .delete_all_refresh_token_for_user(user_id)
+            .await?;
 
         tracing::info!("用户 {} 已成功重置密码，并撤销了所有旧会话。", user_id);
         Ok(())

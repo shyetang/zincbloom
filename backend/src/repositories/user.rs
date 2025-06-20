@@ -3,16 +3,24 @@ use crate::models::{Permission, Role, User, UserPublic};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 // 定义 UserRepository trait，抽象用户数据的数据库操作
 #[async_trait]
 pub trait UserRepository: Send + Sync {
     // Send + Sync 使得 trait 对象可以在多线程中安全共享
+    // 获取数据库连接池,方便开启事务
+    fn get_pool(&self) -> &PgPool;
     // 创建新用户
     async fn create(
         &self,
+        payload: &UserRegistrationPayload,
+        hashed_password: &str,
+    ) -> Result<User>;
+    async fn create_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
         payload: &UserRegistrationPayload,
         hashed_password: &str,
     ) -> Result<User>;
@@ -24,6 +32,7 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_id(&self, user_id: Uuid) -> Result<Option<User>>;
     // 给用户分配角色
     async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>;
+    async fn assign_roles_to_user_in_tx(&self, tx: &mut Transaction<'_, Postgres>, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>;
     // 从用户移除角色
     async fn remove_role_from_user(&self, user_id: Uuid, role_id: Uuid) -> Result<()>;
     // 设置用户的角色列表（先清空后添加）
@@ -76,18 +85,23 @@ impl PostgresUserRepository {
 
 #[async_trait]
 impl UserRepository for PostgresUserRepository {
+    fn get_pool(&self) -> &PgPool {
+        &self.pool
+    }
+
     async fn create(
         &self,
         payload: &UserRegistrationPayload,
         hashed_password: &str,
-    ) -> Result<User> {
+    ) -> Result<User>
+    {
         let user_id = Uuid::new_v4();
         let user = sqlx::query_as!(
             User,
             r#"
             insert into users (id, username, email, hashed_password)
             VALUES ($1,$2,$3,$4)
-            returning id,username,email,hashed_password,created_at,updated_at
+            returning id,username,email,hashed_password,created_at,updated_at,email_verified_at
             "#,
             user_id,
             payload.username,
@@ -101,11 +115,32 @@ impl UserRepository for PostgresUserRepository {
         Ok(user)
     }
 
+    async fn create_in_tx(&self, tx: &mut Transaction<'_, Postgres>, payload: &UserRegistrationPayload, hashed_password: &str) -> Result<User> {
+        let user_id = Uuid::new_v4();
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            insert into users (id, username, email, hashed_password)
+            VALUES ($1,$2,$3,$4)
+            returning id,username,email,hashed_password,created_at,updated_at,email_verified_at
+            "#,
+            user_id,
+            payload.username,
+            payload.email,
+            hashed_password
+        )
+            .fetch_one(&mut **tx)
+            .await
+            .context("创建User失败")?;
+
+        Ok(user)
+    }
+
     async fn find_by_username(&self, username: &str) -> Result<Option<User>> {
         let user = sqlx::query_as!(
             User,
             r#"
-            select id,username,email,hashed_password,created_at,updated_at
+            select id,username,email,hashed_password,created_at,updated_at,email_verified_at
             from users
             where username = $1
             "#,
@@ -122,7 +157,7 @@ impl UserRepository for PostgresUserRepository {
         let user = sqlx::query_as!(
             User,
             r#"
-            select id,username,email,hashed_password,created_at,updated_at
+            select id,username,email,hashed_password,created_at,updated_at,email_verified_at
             from users
             where email = $1
             "#,
@@ -139,7 +174,7 @@ impl UserRepository for PostgresUserRepository {
         let user = sqlx::query_as!(
             User,
             r#"
-            select id,username,email,hashed_password,created_at,updated_at
+            select id,username,email,hashed_password,created_at,updated_at,email_verified_at
             from users
             where id = $1
             "#,
@@ -152,7 +187,8 @@ impl UserRepository for PostgresUserRepository {
         Ok(user)
     }
 
-    async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
+    async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>
+    {
         if role_ids.is_empty() {
             return Ok(());
         }
@@ -165,6 +201,24 @@ impl UserRepository for PostgresUserRepository {
             role_ids,
         )
             .execute(&self.pool)
+            .await
+            .context(format!("给用户id {} 分配角色失败", user_id))?;
+        Ok(())
+    }
+
+    async fn assign_roles_to_user_in_tx(&self, tx: &mut Transaction<'_, Postgres>, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
+        if role_ids.is_empty() {
+            return Ok(());
+        }
+        sqlx::query!(
+            r#"insert into user_roles (user_id, role_id) 
+            select $1,role_id from unnest($2::uuid[]) as t(role_id)
+            on conflict (user_id,role_id) do nothing 
+            "#,
+            user_id,
+            role_ids,
+        )
+            .execute(&mut **tx)
             .await
             .context(format!("给用户id {} 分配角色失败", user_id))?;
         Ok(())
@@ -276,7 +330,7 @@ impl UserRepository for PostgresUserRepository {
         let user = sqlx::query_as!(
             User,
             r#"
-            select u.id,u.username,u.email,u.hashed_password,u.created_at,u.updated_at
+            select u.id,u.username,u.email,u.hashed_password,u.created_at,u.updated_at,u.email_verified_at
             from users u
             inner join refresh_tokens rt on u.id = rt.user_id
             where rt.token_hash = $1 and rt.expires_at > now()
@@ -309,7 +363,10 @@ impl UserRepository for PostgresUserRepository {
     async fn list(&self) -> Result<Vec<User>> {
         sqlx::query_as!(
             User,
-            "select id,username,email,hashed_password, created_at,updated_at from users order by username"
+            r#"
+            select id,username,email,hashed_password, created_at,updated_at,email_verified_at
+            from users order by username
+            "#
         )
             .fetch_all(&self.pool)
             .await
@@ -366,11 +423,12 @@ impl UserRepository for PostgresUserRepository {
             update users
             set username = $1, email = $2, updated_at = NOW()
             where id = $3
-            returning id, username, email, hashed_password, created_at, updated_at
+            returning id, username, email, hashed_password, created_at, updated_at,email_verified_at
             "#,
             user.username,
             user.email,
-            user_id
+            user_id,
+            
         )
             .fetch_one(&self.pool)
             .await?;

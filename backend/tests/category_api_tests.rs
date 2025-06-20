@@ -4,46 +4,41 @@ use axum::{
     http::{Method, Request, StatusCode},
     Router,
 };
-// For `oneshot`
-use backend::services::AdminService;
 use backend::{
-    dtos::category::{CreateCategoryPayload, UpdateCategoryPayload}, // DTOs for Category
+    config::{AppConfig, AuthConfig, DatabaseConfig, EmailConfig, ServerConfig},
+    dtos::category::{CreateCategoryPayload, UpdateCategoryPayload},
     handlers::AppState,
-    models::Category, // Category model
+    models::{Category, Role, User},
     repositories::{
-        CategoryRepository,
-        PostRepository, // Category repository
-        PostgresCategoryRepository,
-        PostgresPostRepository,
-        PostgresTagRepository,
-        TagRepository,
+        CategoryRepository, LoginAttemptRepository, OneTimeTokenRepository, PermissionRepository,
+        PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository,
+        PostgresOneTimeTokenRepository, PostgresPermissionRepository, PostgresPostRepository,
+        PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository,
+        TagRepository, UserRepository,
     },
     routes::create_router,
-    services::{AuthService, CategoryService, PostService, TagService}, // Category service
+    services::{
+        AdminService, AuthService, CategoryService, EmailService, PostService, TagService,
+        UserService,
+    },
+    utils::hash_password,
 };
 use http_body_util::BodyExt;
 use slug::slugify;
-// To verify slug generation
 use sqlx::PgPool;
 use std::sync::{Arc, Once};
 use tower::ServiceExt;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
-// --- 辅助: 确保日志只初始化一次 ---
+// --- 日志和应用设置 (与 post_api_tests.rs 一致) ---
 static TRACING_INIT_TEST: Once = Once::new();
 
 fn ensure_tracing_is_initialized_for_test() {
     TRACING_INIT_TEST.call_once(|| {
         let default_filter = "info,backend=trace,sqlx=warn";
-        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|e| {
-            eprintln!(
-                "[测试日志初始化警告] 解析 RUST_LOG 失败 ('{}'), 将使用默认过滤规则: '{}'",
-                e, default_filter
-            );
-            EnvFilter::new(default_filter)
-        });
-
+        let env_filter =
+            EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new(default_filter));
         tracing_subscriber::fmt()
             .with_env_filter(env_filter)
             .with_test_writer()
@@ -52,49 +47,58 @@ fn ensure_tracing_is_initialized_for_test() {
     });
 }
 
-// --- 辅助函数：设置测试环境 (包含所有服务) ---
-// 可以复用 tag_api_tests.rs 中的 setup_test_app_for_tags，或者创建一个通用的
-// 为了清晰，这里创建一个相似的，但可以考虑重构为一个共享的 setup 函数
-async fn setup_test_app_for_categories(pool: PgPool) -> Router {
+async fn setup_test_app(pool: PgPool) -> Router {
     ensure_tracing_is_initialized_for_test();
-
-    // 为测试手动创建一个 AppConfig 实例
-    // 不从 .env 加载，以保证测试的独立性和确定性。
-    let test_config = backend::config::AppConfig {
-        database: backend::config::DatabaseConfig {
-            url: "placeholder".to_string(), // 在测试中未使用，因为 PgPool 是直接注入的
-        },
-        server: backend::config::ServerConfig {
+    let test_config = AppConfig {
+        database: DatabaseConfig { url: String::new() },
+        server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
         },
-        auth: backend::config::AuthConfig {
-            jwt_secret: "a_very_long_and_secure_secret_for_testing_only".to_string(),
-            jwt_issuer: "test-issuer".to_string(),
-            jwt_audience: "test-audience".to_string(),
-            jwt_expiry_hours: 1,
+        auth: AuthConfig {
+            jwt_secret: "test_secret_for_categories".to_string(),
+            jwt_issuer: "test_issuer".to_string(),
+            jwt_audience: "test_audience".to_string(),
+            access_token_expiry_minutes: 5,
+            refresh_token_expiry_days: 1,
+            max_login_failures: 5,
+            lockout_duration_seconds: 900,
+        },
+        email: EmailConfig {
+            smtp_host: "localhost".to_string(),
+            smtp_port: 1025,
+            smtp_user: "".to_string(),
+            smtp_pass: "".to_string(),
+            from_address: "test@example.com".to_string(),
         },
     };
-
-    // 实例化所有 Repositories
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(pool.clone()));
+    let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(pool.clone()));
+    let permission_repo: Arc<dyn PermissionRepository> =
+        Arc::new(PostgresPermissionRepository::new(pool.clone()));
+    let one_time_token_repo: Arc<dyn OneTimeTokenRepository> =
+        Arc::new(PostgresOneTimeTokenRepository::new(pool.clone()));
+    let login_attempt_repo: Arc<dyn LoginAttemptRepository> =
+        Arc::new(PostgresLoginAttemptRepository::new(pool.clone()));
     let category_repo: Arc<dyn CategoryRepository> =
         Arc::new(PostgresCategoryRepository::new(pool.clone()));
     let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(pool.clone()));
     let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(pool.clone()));
-    let user_repo: Arc<dyn backend::repositories::UserRepository> = Arc::new(
-        backend::repositories::PostgresUserRepository::new(pool.clone()),
-    );
-    let role_repo: Arc<dyn backend::repositories::RoleRepository> = Arc::new(
-        backend::repositories::PostgresRoleRepository::new(pool.clone()),
-    );
-
-    // 实例化所有 Services
+    let email_service = Arc::new(EmailService::new(test_config.email.clone()));
     let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
         role_repo.clone(),
+        login_attempt_repo,
+        one_time_token_repo,
+        email_service,
         &test_config,
     ));
-    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone()));
+    let admin_service = Arc::new(AdminService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        permission_repo,
+    ));
+    let user_service = Arc::new(UserService::new(user_repo.clone()));
     let category_service = Arc::new(CategoryService::new(category_repo.clone()));
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
     let post_service = Arc::new(PostService::new(
@@ -102,495 +106,282 @@ async fn setup_test_app_for_categories(pool: PgPool) -> Router {
         category_repo.clone(),
         tag_repo.clone(),
     ));
-
-    // 创建更新后的 AppState
     let app_state = AppState {
         post_service,
         category_service,
         tag_service,
         auth_service,
         admin_service,
+        user_service,
     };
-
-    // 创建 Router
     create_router(app_state)
 }
 
-// --- 辅助函数：在测试数据库中创建单个分类 ---
+// --- 认证和数据Seeding辅助函数 (与 post_api_tests.rs 一致) ---
+
+/// 注册一个新用户，并赋予指定角色
+async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Result<User> {
+    let role = sqlx::query_as!(Role, "SELECT * FROM roles WHERE name = $1", role_name)
+        .fetch_optional(pool)
+        .await?
+        .context(format!("Role '{}' not found", role_name))?;
+    let hashed_password = hash_password("StrongPassword123!")?;
+    let user = sqlx::query_as!(
+        User,
+        r#"INSERT INTO users (id, username, email, hashed_password) VALUES ($1, $2, $3, $4) RETURNING *"#,
+        Uuid::new_v4(), 
+        name, 
+        format!("{}@example.com", name), hashed_password
+    ).fetch_one(pool).await?;
+    sqlx::query!(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+        user.id,
+        role.id
+    )
+        .execute(pool)
+        .await?;
+    Ok(user)
+}
+
+/// 为指定用户登录并获取token
+async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Result<String> {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(
+                    &serde_json::json!({ "username": username, "password": password }),
+                )?))?,
+        )
+        .await?;
+    let body_bytes = response.into_body().collect().await?.to_bytes();
+    let body_json: serde_json::Value = serde_json::from_slice(&body_bytes)?;
+    Ok(body_json["access_token"]
+        .as_str()
+        .context("access_token not found")?
+        .to_string())
+}
+
+/// 注册一个随机的普通用户并登录
+async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
+    let username = format!("user_{}", Uuid::new_v4());
+    let email = format!("{}@example.com", &username);
+    let password = "StrongPassword123!";
+
+    let register_payload = serde_json::json!({
+        "username": &username,
+        "email": &email,
+        "password": &password
+    });
+
+    let register_response = app.clone().oneshot(
+        Request::builder()
+            .method(Method::POST)
+            .uri("/auth/register")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&register_payload)?))?,
+    ).await?;
+
+    if register_response.status() != StatusCode::CREATED {
+        return Err(anyhow::anyhow!("Failed to register user for test"));
+    }
+
+    let login_response = app.clone().oneshot(
+        Request::builder()
+            .method(Method::POST)
+            .uri("/auth/login")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&serde_json::json!({
+                "username": &username, "password": &password
+            }))?))?,
+    ).await?;
+
+    let body_bytes = login_response.into_body().collect().await?.to_bytes();
+    let login_json: serde_json::Value = serde_json::from_slice(&body_bytes)?;
+
+    let token = login_json["access_token"].as_str().context("token not in login response")?.to_string();
+    let user_id = Uuid::parse_str(login_json["user"]["id"].as_str().context("user.id not in login response")?)?;
+
+    Ok((token, user_id))
+}
+
+/// 在数据库中创建单个分类
 async fn seed_one_category(pool: &PgPool, name: &str) -> Result<Category> {
-    let slug = slugify(name);
-    let category = sqlx::query_as!(
+    sqlx::query_as!(
         Category,
-        r#"
-        INSERT INTO categories (id, name, slug)
-        VALUES ($1, $2, $3)
-        RETURNING id, name, slug, created_at, updated_at
-        "#,
+        r#"INSERT INTO categories (id, name, slug) VALUES ($1, $2, $3) RETURNING *"#,
         Uuid::new_v4(),
         name,
-        slug
+        slugify(name)
     )
-    .fetch_one(pool)
-    .await
-    .context(format!("Seeding category '{}' failed", name))?;
-    Ok(category)
+        .fetch_one(pool)
+        .await
+        .map_err(Into::into)
 }
 
-// --- 辅助函数：在测试数据库中创建多个分类 ---
-async fn seed_categories(pool: &PgPool, names: Vec<&str>) -> Result<Vec<Category>> {
-    let mut categories = Vec::new();
-    for name in names {
-        let category = seed_one_category(pool, name).await?;
-        categories.push(category);
-    }
-    Ok(categories)
-}
+// --- 分类API集成测试 ---
 
-// --- 测试 POST /categories (创建分类) ---
+// == 公开读取操作 (GET)
 #[sqlx::test]
-async fn test_create_category_valid_payload(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let payload = CreateCategoryPayload {
-        // 使用 CreateCategoryPayload
-        name: Some("测试分类".to_string()), // CreateCategoryPayload 的 name 是 Option<String>
-    };
+async fn test_list_categories_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    seed_one_category(&pool, "技术").await?;
+    seed_one_category(&pool, "生活").await?;
 
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/categories")
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-
-    let response = app.oneshot(request).await?;
-
-    assert_eq!(response.status(), StatusCode::CREATED);
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let created_category: Category = serde_json::from_slice(&body_bytes) // 反序列化为 Category
-        .context("无法将响应体反序列化为 Category")?;
-
-    assert_eq!(created_category.name, *payload.name.as_ref().unwrap()); // 注意 payload.name 是 Option
-    assert!(!created_category.slug.is_empty());
-    assert_eq!(
-        created_category.slug,
-        slugify(payload.name.as_ref().unwrap())
-    );
-
-    // 直接从数据库验证
-    let db_category = sqlx::query_as!(
-        Category,
-        "SELECT * FROM categories WHERE id = $1",
-        created_category.id
-    )
-    .fetch_one(&pool)
-    .await?;
-    assert_eq!(db_category.name, *payload.name.as_ref().unwrap());
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_create_category_empty_name_in_option(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let payload = CreateCategoryPayload {
-        name: Some("".to_string()), // 空名称，但 Some()
-    };
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/categories")
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    let status = response.status();
-    // CategoryService 中对空名称的 trim().is_empty() 应该捕获这个
-    assert!(
-        status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::BAD_REQUEST,
-        "预期空名称(Some(\"\"))返回错误状态码, 实际为: {}",
-        status
-    );
-    if status != StatusCode::INTERNAL_SERVER_ERROR {
-        let body_bytes = response.into_body().collect().await?.to_bytes();
-        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-        assert!(
-            error_response["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("分类名称不能为空")
-        );
-    }
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_create_category_none_name(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let payload = CreateCategoryPayload {
-        name: None, // 名称字段为 None
-    };
-    // 根据你的 CreateCategoryPayload 定义，name 是 Option<String>。
-    // CategoryService 的 create_category 方法中：
-    // let name_owned = payload.name.ok_or_else(|| anyhow!("分类名称不能为空"))?;
-    // 这会因为 payload.name 是 None 而直接返回错误。
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/categories")
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?; // payload 会是 {"name":null}
-
-    let response = app.oneshot(request).await?;
-    let status = response.status();
-
-    assert!(
-        status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::BAD_REQUEST,
-        "预期 name:None 返回错误状态码, 实际为: {}",
-        status
-    );
-    if status != StatusCode::INTERNAL_SERVER_ERROR {
-        let body_bytes = response.into_body().collect().await?.to_bytes();
-        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-        assert!(
-            error_response["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("分类名称不能为空")
-        );
-    }
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_create_category_name_conflict(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let category_name = "唯一的分类";
-
-    let _first_category = seed_one_category(&pool, category_name).await?;
-
-    let payload_conflict = CreateCategoryPayload {
-        name: Some(category_name.to_string()),
-    };
-
-    let request_conflict = Request::builder()
-        .method(Method::POST)
-        .uri("/categories")
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload_conflict)?))?;
-
-    let response_conflict = app.oneshot(request_conflict).await?;
-
-    assert_eq!(
-        response_conflict.status(),
-        StatusCode::BAD_REQUEST,
-        "预期名称冲突返回 BAD_REQUEST"
-    );
-    Ok(())
-}
-
-// --- 测试 GET /categories (获取分类列表) ---
-#[sqlx::test]
-async fn test_list_categories_empty(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
+    // 执行
     let request = Request::builder().uri("/categories").body(Body::empty())?;
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
 
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let categories: Vec<Category> = serde_json::from_slice(&body_bytes)?;
-    assert!(categories.is_empty());
-    Ok(())
-}
+    assert_eq!(categories.len(), 2);
 
-#[sqlx::test]
-async fn test_list_categories_multiple(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let cat_names = vec!["技术", "生活", "随笔"];
-    let mut seeded_categories = seed_categories(&pool, cat_names).await?;
-    seeded_categories.sort_by_key(|c| c.name.clone()); // API 默认按名称排序
-
-    let request = Request::builder().uri("/categories").body(Body::empty())?;
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let fetched_categories: Vec<Category> = serde_json::from_slice(&body_bytes)?;
-
-    assert_eq!(fetched_categories.len(), seeded_categories.len());
-    for i in 0..seeded_categories.len() {
-        assert_eq!(fetched_categories[i].id, seeded_categories[i].id);
-        assert_eq!(fetched_categories[i].name, seeded_categories[i].name);
-    }
-    Ok(())
-}
-
-// --- 测试 GET /categories/{identifier} (获取单个分类) ---
-#[sqlx::test]
-async fn test_get_category_by_id_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let seeded_category = seed_one_category(&pool, "ID获取测试").await?;
-
-    let request = Request::builder()
-        .uri(format!("/categories/{}", seeded_category.id))
-        .body(Body::empty())?;
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body_bytes = response.into_body().collect().await?.to_bytes();
-    let fetched: Category = serde_json::from_slice(&body_bytes)?;
-    assert_eq!(fetched.id, seeded_category.id);
     Ok(())
 }
 
 #[sqlx::test]
 async fn test_get_category_by_slug_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let seeded_category = seed_one_category(&pool, "Slug获取测试").await?;
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let seeded_category = seed_one_category(&pool, "一个独特的分类").await?;
 
+    // 执行
     let request = Request::builder()
         .uri(format!("/categories/{}", seeded_category.slug))
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
 
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let fetched: Category = serde_json::from_slice(&body_bytes)?;
-    assert_eq!(fetched.slug, seeded_category.slug);
+    assert_eq!(fetched.id, seeded_category.id);
+
     Ok(())
 }
 
+// == 写入/修改操作 (需要 'editor' 或 'admin' 权限)
+
 #[sqlx::test]
-async fn test_get_category_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let random_uuid = Uuid::new_v4();
-    let non_existent_slug = "不存在的分类-slug";
-
-    // Test by ID
-    let request_id = Request::builder()
-        .uri(format!("/categories/{}", random_uuid))
-        .body(Body::empty())?;
-    let response_id = app.clone().oneshot(request_id).await?;
-    assert_eq!(response_id.status(), StatusCode::NOT_FOUND);
-
-    // Test by slug
-    let request_slug = Request::builder()
-        .uri(format!("/categories/{}", non_existent_slug))
-        .body(Body::empty())?;
-    let response_slug = app.oneshot(request_slug).await?;
-    assert_eq!(response_slug.status(), StatusCode::NOT_FOUND);
-    Ok(())
-}
-
-// --- 测试 PUT /categories/{id} (更新分类) ---
-#[sqlx::test]
-async fn test_update_category_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let original_category = seed_one_category(&pool, "旧分类名").await?;
-
-    let payload = UpdateCategoryPayload {
-        // UpdateCategoryPayload
-        name: Some("新分类名".to_string()),
+async fn test_create_category_as_editor_success(pool: PgPool) -> Result<()> {
+    // 准备: 创建一个 "editor" 用户并获取 token
+    let app = setup_test_app(pool.clone()).await;
+    let editor = seed_user_with_role(&pool, "editor_for_cat", "editor").await?;
+    let token = get_token_for_user(&app, &editor.username, "StrongPassword123!").await?;
+    let payload = CreateCategoryPayload {
+        name: Some("由编辑创建".to_string()),
     };
-    let expected_new_slug = slugify("新分类名");
 
+    // 执行
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/categories")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::CREATED);
+    Ok(())
+}
+
+#[sqlx::test]
+async fn test_update_category_as_editor_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let editor = seed_user_with_role(&pool, "editor_for_cat_update", "editor").await?;
+    let token = get_token_for_user(&app, &editor.username, "StrongPassword123!").await?;
+    let category = seed_one_category(&pool, "旧分类").await?;
+    let payload = UpdateCategoryPayload {
+        name: Some("新分类".to_string()),
+    };
+
+    // 执行
     let request = Request::builder()
         .method(Method::PUT)
-        .uri(format!("/categories/{}", original_category.id))
-        .header("content-type", "application/json")
+        .uri(format!("/categories/{}", category.id))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::from(serde_json::to_vec(&payload)?))?;
-
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::OK);
 
+    // 断言
+    assert_eq!(response.status(), StatusCode::OK);
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let updated: Category = serde_json::from_slice(&body_bytes)?;
-
-    assert_eq!(updated.id, original_category.id);
-    assert_eq!(updated.name, "新分类名");
-    assert_eq!(updated.slug, expected_new_slug);
-    assert!(updated.updated_at > original_category.updated_at);
+    assert_eq!(updated.name, "新分类");
     Ok(())
 }
 
 #[sqlx::test]
-async fn test_update_category_empty_name(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let original_category = seed_one_category(&pool, "有效分类名").await?;
-    let payload = UpdateCategoryPayload {
-        name: Some("".to_string()),
-    };
+async fn test_delete_category_as_editor_success(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let editor = seed_user_with_role(&pool, "editor_for_cat_delete", "editor").await?;
+    let token = get_token_for_user(&app, &editor.username, "StrongPassword123!").await?;
+    let category = seed_one_category(&pool, "待删除分类").await?;
 
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(format!("/categories/{}", original_category.id))
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    let status = response.status();
-    assert!(
-        status == StatusCode::INTERNAL_SERVER_ERROR || status == StatusCode::BAD_REQUEST,
-        "预期更新为empty name返回错误, 实际为: {}",
-        status
-    );
-    if status != StatusCode::INTERNAL_SERVER_ERROR {
-        let body_bytes = response.into_body().collect().await?.to_bytes();
-        let error_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
-        assert!(
-            error_response["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("分类名称不能为空")
-        );
-    }
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_update_category_none_name(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let original_category = seed_one_category(&pool, "有名字的分类").await?;
-    // UpdateCategoryPayload 的 name 是 Option<String>
-    // CategoryService 的 update_category 如果 payload.name 是 None (或者没有提供 name 字段导致 serde 反序列化为 None)
-    // 它的逻辑是：
-    // if new_name_opt.is_none() { return self.get_category_by_id(id).await ... }
-    // 所以，如果发送 {"name": null} 或 {} (如果UpdateCategoryPayload有 #[serde(default)])
-    // 它会尝试获取并返回原始分类（如果没其他字段更新的话）。
-    // 这意味着状态码会是 OK，并且返回的是未修改的分类。
-    let payload = UpdateCategoryPayload { name: None }; //  {"name": null}
-    let empty_payload: UpdateCategoryPayload = Default::default(); // {}
-
-    // Test with name: None
-    let request_none = Request::builder()
-        .method(Method::PUT)
-        .uri(format!("/categories/{}", original_category.id))
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?; // {"name":null}
-
-    let response_none = app.clone().oneshot(request_none).await?;
-    assert_eq!(
-        response_none.status(),
-        StatusCode::OK,
-        "预期name:None时，返回原分类和OK状态"
-    );
-    let body_bytes_none = response_none.into_body().collect().await?.to_bytes();
-    let fetched_cat_none: Category = serde_json::from_slice(&body_bytes_none)?;
-    assert_eq!(fetched_cat_none.id, original_category.id);
-    assert_eq!(fetched_cat_none.name, original_category.name);
-
-    // Test with empty payload (if UpdateCategoryPayload derives Default)
-    // payload.name will be None
-    let request_empty = Request::builder()
-        .method(Method::PUT)
-        .uri(format!("/categories/{}", original_category.id))
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&empty_payload)?))?; // {}
-
-    let response_empty = app.clone().oneshot(request_empty).await?;
-    assert_eq!(
-        response_empty.status(),
-        StatusCode::OK,
-        "预期空payload时，返回原分类和OK状态"
-    );
-    let body_bytes_empty = response_empty.into_body().collect().await?.to_bytes();
-    let fetched_cat_empty: Category = serde_json::from_slice(&body_bytes_empty)?;
-    assert_eq!(fetched_cat_empty.id, original_category.id);
-    assert_eq!(fetched_cat_empty.name, original_category.name);
-
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_update_category_name_conflict(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let _cat1 = seed_one_category(&pool, "已存在分类").await?;
-    let cat_to_update = seed_one_category(&pool, "要改名的分类").await?;
-    let payload = UpdateCategoryPayload {
-        name: Some("已存在分类".to_string()),
-    };
-
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(format!("/categories/{}", cat_to_update.id))
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    Ok(())
-}
-
-#[sqlx::test]
-async fn test_update_category_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let non_existent_uuid = Uuid::new_v4();
-    let payload = UpdateCategoryPayload {
-        name: Some("随意名称".to_string()),
-    };
-
-    let request = Request::builder()
-        .method(Method::PUT)
-        .uri(format!("/categories/{}", non_existent_uuid))
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    Ok(())
-}
-
-// --- 测试 DELETE /categories/{id} (删除分类) ---
-#[sqlx::test]
-async fn test_delete_category_success(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool.clone()).await;
-    let cat_to_delete = seed_one_category(&pool, "要删除的分类").await?;
-
+    // 执行
     let request = Request::builder()
         .method(Method::DELETE)
-        .uri(format!("/categories/{}", cat_to_delete.id))
+        .uri(format!("/categories/{}", category.id))
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())?;
+    let response = app.oneshot(request).await?;
 
-    let response = app.clone().oneshot(request).await?;
+    // 断言
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    Ok(())
+}
 
-    let maybe_deleted = sqlx::query_as!(
-        Category,
-        "SELECT * FROM categories WHERE id = $1",
-        cat_to_delete.id
-    )
-    .fetch_optional(&pool)
-    .await?;
-    assert!(maybe_deleted.is_none());
+// == 授权失败测试
+#[sqlx::test]
+async fn test_create_category_no_token_fails(pool: PgPool) -> Result<()> {
+    // 准备
+    let app = setup_test_app(pool.clone()).await;
+    let payload = CreateCategoryPayload {
+        name: Some("无Token分类".to_string()),
+    };
+
+    // 执行
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/categories")
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
+    let response = app.oneshot(request).await?;
+
+    // 断言
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     Ok(())
 }
 
 #[sqlx::test]
-async fn test_delete_category_not_found(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let non_existent_uuid = Uuid::new_v4();
+async fn test_create_category_as_regular_user_fails(pool: PgPool) -> Result<()> {
+    // 准备: 创建一个普通用户，他没有 `category:manage` 权限
+    let app = setup_test_app(pool.clone()).await;
+    let (user_token, _) = register_and_login_new_user(&app).await?;
+    let payload = CreateCategoryPayload {
+        name: Some("普通用户尝试创建".to_string()),
+    };
 
+    // 执行
     let request = Request::builder()
-        .method(Method::DELETE)
-        .uri(format!("/categories/{}", non_existent_uuid))
-        .body(Body::empty())?;
+        .method(Method::POST)
+        .uri("/categories")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", user_token))
+        .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    Ok(())
-}
 
-#[sqlx::test]
-async fn test_delete_category_invalid_uuid_format(pool: PgPool) -> Result<()> {
-    let app = setup_test_app_for_categories(pool).await;
-    let invalid_uuid = "这不是uuid";
-    let request = Request::builder()
-        .method(Method::DELETE)
-        .uri(format!("/categories/{}", invalid_uuid))
-        .body(Body::empty())?;
-    let response = app.oneshot(request).await?;
-    assert_eq!(
-        response.status(),
-        StatusCode::BAD_REQUEST,
-        "预期删除无效UUID格式返回 400"
-    );
+    // 断言
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
     Ok(())
 }

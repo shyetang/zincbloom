@@ -1,9 +1,17 @@
 use anyhow::{Context, Result};
 use backend::config::AppConfig;
 use backend::handlers::AppState;
-use backend::repositories::{CategoryRepository, LoginAttemptRepository, OneTimeTokenRepository, PermissionRepository, PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository, PostgresOneTimeTokenRepository, PostgresPermissionRepository, PostgresPostRepository, PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository, TagRepository, UserRepository};
+use backend::repositories::{
+    CategoryRepository, LoginAttemptRepository, OneTimeTokenRepository, PermissionRepository,
+    PostRepository, PostgresCategoryRepository, PostgresLoginAttemptRepository,
+    PostgresOneTimeTokenRepository, PostgresPermissionRepository, PostgresPostRepository,
+    PostgresRoleRepository, PostgresTagRepository, PostgresUserRepository, RoleRepository,
+    TagRepository, UserRepository,
+};
 use backend::routes::create_router;
-use backend::services::{AdminService, AuthService, CategoryService, EmailService, PostService, TagService, UserService};
+use backend::services::{
+    AdminService, AuthService, CategoryService, EmailService, PostService, TagService, UserService,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
@@ -20,6 +28,8 @@ async fn main() -> Result<()> {
 
     // 加载配置
     let config = AppConfig::from_env().context("加载应用配置失败")?;
+
+    tracing::info!("应用程序正在使用的邮件配置: {:?}", config.email);
 
     // 设置数据库连接池
     let db_pool = PgPool::connect(&config.database.url)
@@ -44,8 +54,10 @@ async fn main() -> Result<()> {
     let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(db_pool.clone()));
     let permission_repo: Arc<dyn PermissionRepository> =
         Arc::new(PostgresPermissionRepository::new(db_pool.clone()));
-    let login_attempt_repo: Arc<dyn LoginAttemptRepository> = Arc::new(PostgresLoginAttemptRepository::new(db_pool.clone()));
-    let one_time_token_repo: Arc<dyn OneTimeTokenRepository> = Arc::new(PostgresOneTimeTokenRepository::new(db_pool.clone()));
+    let login_attempt_repo: Arc<dyn LoginAttemptRepository> =
+        Arc::new(PostgresLoginAttemptRepository::new(db_pool.clone()));
+    let one_time_token_repo: Arc<dyn OneTimeTokenRepository> =
+        Arc::new(PostgresOneTimeTokenRepository::new(db_pool.clone()));
 
     // -- 实例化所有的 Services ----
     let tag_service = Arc::new(TagService::new(tag_repo.clone()));
@@ -60,9 +72,12 @@ async fn main() -> Result<()> {
         email_service.clone(),
         &config,
     ));
-    let admin_service = Arc::new(AdminService::new(user_repo.clone(), role_repo.clone(), permission_repo.clone()));
+    let admin_service = Arc::new(AdminService::new(
+        user_repo.clone(),
+        role_repo.clone(),
+        permission_repo.clone(),
+    ));
     let user_service = Arc::new(UserService::new(user_repo.clone()));
-
 
     //  -- 创建 PostService 实例 ---
     let post_service = Arc::new(PostService::new(

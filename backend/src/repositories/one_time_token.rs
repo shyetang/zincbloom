@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 #[async_trait]
@@ -9,6 +9,14 @@ pub trait OneTimeTokenRepository: Send + Sync {
     // 存储一个新的一次性令牌
     async fn store_token(
         &self,
+        user_id: Uuid,
+        token_hash: &str,
+        token_type: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<()>;
+    async fn store_token_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
         user_id: Uuid,
         token_hash: &str,
         token_type: &str,
@@ -35,7 +43,13 @@ impl PostgresOneTimeTokenRepository {
 }
 #[async_trait]
 impl OneTimeTokenRepository for PostgresOneTimeTokenRepository {
-    async fn store_token(&self, user_id: Uuid, token_hash: &str, token_type: &str, expires_at: DateTime<Utc>) -> Result<()> {
+    async fn store_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &str,
+        token_type: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<()> {
         sqlx::query!(
             "insert into one_time_tokens (token_hash, user_id, token_type, expires_at) values ($1,$2,$3,$4)",
             token_hash,
@@ -49,7 +63,32 @@ impl OneTimeTokenRepository for PostgresOneTimeTokenRepository {
         Ok(())
     }
 
-    async fn find_and_consume_token(&self, token_hash: &str, token_type: &str) -> Result<Option<Uuid>> {
+    async fn store_token_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        user_id: Uuid,
+        token_hash: &str,
+        token_type: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<()> {
+        sqlx::query!(
+            "insert into one_time_tokens (token_hash, user_id, token_type, expires_at) values ($1,$2,$3,$4)",
+            token_hash,
+            user_id,
+            token_type,
+            expires_at
+        )
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn find_and_consume_token(
+        &self,
+        token_hash: &str,
+        token_type: &str,
+    ) -> Result<Option<Uuid>> {
         // 在单个事务中，执行先查找后删除，保证原子性
         let mut tx = self.pool.begin().await.context("开启数据库事务失败")?;
         // 查找有效(未过期)的token
@@ -67,8 +106,8 @@ impl OneTimeTokenRepository for PostgresOneTimeTokenRepository {
                 "delete from one_time_tokens where token_hash = $1",
                 token_hash
             )
-                .execute(&mut *tx)
-                .await?;
+            .execute(&mut *tx)
+            .await?;
 
             // 提交事务
             tx.commit().await.context("提交消费令牌的事务失败")?;
