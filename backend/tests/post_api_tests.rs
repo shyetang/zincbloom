@@ -63,7 +63,6 @@ async fn setup_test_app(pool: PgPool) -> Router {
             host: "127.0.0.1".to_string(),
             port: 8080,
         },
-        // 使用与 auth_api_tests 一致的认证配置
         auth: AuthConfig {
             jwt_secret: "test_secret_for_posts".to_string(),
             jwt_issuer: "test_issuer".to_string(),
@@ -73,10 +72,9 @@ async fn setup_test_app(pool: PgPool) -> Router {
             max_login_failures: 5,
             lockout_duration_seconds: 900,
         },
-        // 添加邮件配置，因为 AuthService 依赖它
         email: EmailConfig {
             smtp_host: "localhost".to_string(),
-            smtp_port: 1025, // MailHog/MailCatcher 的默认端口
+            smtp_port: 1025, // 本地 SMTP 的默认端口
             smtp_user: "".to_string(),
             smtp_pass: "".to_string(),
             from_address: "test@example.com".to_string(),
@@ -139,7 +137,6 @@ async fn setup_test_app(pool: PgPool) -> Router {
 
 /// 注册一个新用户，并赋予指定角色
 async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Result<User> {
-    // 确保角色存在
     let role = sqlx::query_as!(
         Role,
         "SELECT id, name, description, created_at, updated_at FROM roles WHERE name = $1",
@@ -152,10 +149,8 @@ async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Resu
         role_name
     ))?;
 
-    // 为用户创建一个有效的密码哈希
     let valid_password_hash = hash_password("StrongPassword123!")?;
 
-    // 创建用户
     let user = sqlx::query_as!(
         User,
         r#"INSERT INTO users (id, username, email, hashed_password) VALUES ($1, $2, $3, $4)
@@ -165,10 +160,9 @@ async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Resu
         format!("{}@example.com", name),
         valid_password_hash
     )
-    .fetch_one(pool)
-    .await?;
+        .fetch_one(pool)
+        .await?;
 
-    // 赋予角色
     sqlx::query!(
         "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
         user.id,
@@ -206,13 +200,11 @@ async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Res
 }
 
 /// 辅助函数：注册一个随机用户，并以该用户身份登录，返回(token, user_id)
-/// 这是为了确保每个测试用例的用户都是隔离的
 async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
     let username = format!("testuser_{}", Uuid::new_v4());
     let email = format!("test_{}@example.com", username);
-    let password = "StrongPassword123!"; // 使用符合策略的密码
+    let password = "StrongPassword123!";
 
-    // 注册
     let register_payload = serde_json::json!({
         "username": &username,
         "email": &email,
@@ -229,7 +221,6 @@ async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
         )
         .await?;
 
-    // 登录
     let login_payload = serde_json::json!({ "username": &username, "password": &password });
     let response = app
         .clone()
@@ -242,7 +233,6 @@ async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
         )
         .await?;
 
-    // 解析响应以获取 token 和 user_id
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let login_response: serde_json::Value = serde_json::from_slice(&body_bytes)?;
 
@@ -265,6 +255,7 @@ async fn seed_one_post(
     pool: &PgPool,
     author_id: Uuid,
     title: &str,
+    content: &str, // 接受 Markdown 内容
     published: bool,
 ) -> Result<Post> {
     let slug = slugify(title);
@@ -278,7 +269,7 @@ async fn seed_one_post(
         Uuid::new_v4(),
         slug,
         title,
-        "Some default content.",
+        content, // 存储 Markdown 内容
         author_id,
         if published {
             Some(chrono::Utc::now())
@@ -330,7 +321,7 @@ async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
 
     let payload = CreatePostPayload {
         title: "一个由普通用户创建的帖子".to_string(),
-        content: "这是帖子的内容...".to_string(),
+        content: "这是帖子的**Markdown**内容...".to_string(), // 使用 Markdown
         category_ids: None,
         tag_ids: None,
     };
@@ -351,6 +342,11 @@ async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
     let created_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
 
     assert_eq!(created_post.title, payload.title);
+    assert_eq!(created_post.content_markdown, payload.content);
+    assert_eq!(
+        created_post.content_html,
+        "<p>这是帖子的<strong>Markdown</strong>内容...</p>\n"
+    );
 
     // 从数据库验证作者ID是否正确
     let db_post = sqlx::query_as!(Post, "SELECT * FROM posts WHERE id = $1", created_post.id)
@@ -363,7 +359,6 @@ async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (token, _user_id) = register_and_login_new_user(&app).await?;
     let category = seed_one_category(&pool, "关联分类").await?;
@@ -376,7 +371,6 @@ async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> 
         tag_ids: Some(vec![tag.id]),
     };
 
-    // 执行
     let request = Request::builder()
         .method(Method::POST)
         .uri("/posts")
@@ -385,7 +379,6 @@ async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> 
         .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
@@ -402,7 +395,6 @@ async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> 
 
 #[sqlx::test]
 async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool).await;
     let payload = CreatePostPayload {
         title: "无Token帖子".into(),
@@ -411,7 +403,6 @@ async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
         tag_ids: None,
     };
 
-    // 执行
     let request = Request::builder()
         .method(Method::POST)
         .uri("/posts")
@@ -419,7 +410,6 @@ async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
         .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     Ok(())
 }
@@ -428,20 +418,17 @@ async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_list_posts_pagination(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (_token, user_id) = register_and_login_new_user(&app).await?;
     for i in 0..15 {
-        seed_one_post(&pool, user_id, &format!("Post {}", i), true).await?;
+        seed_one_post(&pool, user_id, &format!("Post {}", i), "list content", true).await?;
     }
 
-    // 执行: 请求第2页，每页5条
     let request = Request::builder()
         .uri("/posts?page=2&page_size=5")
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
@@ -452,29 +439,40 @@ async fn test_list_posts_pagination(pool: PgPool) -> Result<()> {
     assert_eq!(page.page_size, 5);
     assert_eq!(page.total_pages, 3);
     assert_eq!(page.items.len(), 5);
+    // 验证列表中的内容也被正确转换
+    assert!(page.items[0].content_html.contains("<p>list content</p>"));
 
     Ok(())
 }
 
 #[sqlx::test]
 async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (_token, user_id) = register_and_login_new_user(&app).await?;
-    let seeded_post = seed_one_post(&pool, user_id, "一个用于Slug测试的帖子", true).await?;
+    let markdown_content = "# Slug测试\n\n- item 1\n- item 2";
+    let expected_html = "<h1>Slug测试</h1>\n<ul>\n<li>item 1</li>\n<li>item 2</li>\n</ul>\n";
+    let seeded_post = seed_one_post(
+        &pool,
+        user_id,
+        "一个用于Slug测试的帖子",
+        markdown_content,
+        true,
+    )
+    .await?;
 
-    // 执行
     let request = Request::builder()
         .uri(format!("/posts/{}", seeded_post.slug))
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let fetched_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
+
     assert_eq!(fetched_post.id, seeded_post.id);
+    assert_eq!(fetched_post.content_markdown, markdown_content);
+    assert_eq!(fetched_post.content_html, expected_html);
 
     Ok(())
 }
@@ -483,18 +481,16 @@ async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_update_own_post_success(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (token, user_id) = register_and_login_new_user(&app).await?;
-    let original_post = seed_one_post(&pool, user_id, "我的原始帖子", true).await?;
+    let original_post = seed_one_post(&pool, user_id, "我的原始帖子", "原始内容", true).await?;
 
     let payload = UpdatePostPayload {
         title: Some("我的更新后的帖子标题".to_string()),
-        content: Some("更新后的内容".to_string()),
+        content: Some("`更新后`的内容".to_string()),
         ..Default::default()
     };
 
-    // 执行
     let request = Request::builder()
         .method(Method::PUT)
         .uri(format!("/posts/{}", original_post.id))
@@ -503,26 +499,30 @@ async fn test_update_own_post_success(pool: PgPool) -> Result<()> {
         .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = response.into_body().collect().await?.to_bytes();
     let updated_post: PostDetailDto = serde_json::from_slice(&body_bytes)?;
 
-    assert_eq!(updated_post.title, payload.title.unwrap());
-    assert_eq!(updated_post.content, payload.content.unwrap());
+    assert_eq!(updated_post.title, payload.title.clone().unwrap());
+    assert_eq!(
+        updated_post.content_markdown,
+        payload.content.clone().unwrap()
+    );
+    assert_eq!(
+        updated_post.content_html,
+        "<p><code>更新后</code>的内容</p>\n"
+    );
 
     Ok(())
 }
 
 #[sqlx::test]
 async fn test_update_post_not_owner_fails(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
-    // 用户A (帖子所有者)
     let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
-    let post_to_update = seed_one_post(&pool, owner_id, "一篇不让别人改的帖子", true).await?;
-    // 用户B (非所有者，普通用户)
+    let post_to_update =
+        seed_one_post(&pool, owner_id, "一篇不让别人改的帖子", "content", true).await?;
     let (attacker_token, _attacker_id) = register_and_login_new_user(&app).await?;
 
     let payload = UpdatePostPayload {
@@ -530,7 +530,6 @@ async fn test_update_post_not_owner_fails(pool: PgPool) -> Result<()> {
         ..Default::default()
     };
 
-    // 执行: 用户B尝试修改用户A的帖子
     let request = Request::builder()
         .method(Method::PUT)
         .uri(format!("/posts/{}", post_to_update.id))
@@ -539,7 +538,6 @@ async fn test_update_post_not_owner_fails(pool: PgPool) -> Result<()> {
         .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     Ok(())
@@ -547,14 +545,11 @@ async fn test_update_post_not_owner_fails(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_update_post_as_editor_success(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
-    // 用户A (帖子所有者)
     let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
-    let post_to_update = seed_one_post(&pool, owner_id, "一篇编辑可以改的帖子", true).await?;
-    // 用户B (编辑)
-    // 注意：这要求 'editor' 角色和 'post:edit_any' 权限已通过迁移脚本 seeding
-    let editor = seed_user_with_role(&pool, "editor_user", "editor").await?;
+    let post_to_update =
+        seed_one_post(&pool, owner_id, "一篇编辑可以改的帖子", "content", true).await?;
+    let editor = seed_user_with_role(&pool, "editor_user_for_post", "editor").await?;
     let editor_token = get_token_for_user(&app, &editor.username, "StrongPassword123!").await?;
 
     let payload = UpdatePostPayload {
@@ -562,7 +557,6 @@ async fn test_update_post_as_editor_success(pool: PgPool) -> Result<()> {
         ..Default::default()
     };
 
-    // 执行: 编辑用户尝试修改用户A的帖子
     let request = Request::builder()
         .method(Method::PUT)
         .uri(format!("/posts/{}", post_to_update.id))
@@ -571,7 +565,6 @@ async fn test_update_post_as_editor_success(pool: PgPool) -> Result<()> {
         .body(Body::from(serde_json::to_vec(&payload)?))?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::OK);
 
     Ok(())
@@ -581,12 +574,10 @@ async fn test_update_post_as_editor_success(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_delete_own_post_success(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (token, user_id) = register_and_login_new_user(&app).await?;
-    let post_to_delete = seed_one_post(&pool, user_id, "一篇待删除的帖子", true).await?;
+    let post_to_delete = seed_one_post(&pool, user_id, "一篇待删除的帖子", "c", true).await?;
 
-    // 执行
     let request = Request::builder()
         .method(Method::DELETE)
         .uri(format!("/posts/{}", post_to_delete.id))
@@ -594,10 +585,8 @@ async fn test_delete_own_post_success(pool: PgPool) -> Result<()> {
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-    // 从数据库验证帖子已被删除
     let count = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM posts WHERE id = $1",
         post_to_delete.id
@@ -611,13 +600,11 @@ async fn test_delete_own_post_success(pool: PgPool) -> Result<()> {
 
 #[sqlx::test]
 async fn test_delete_post_not_owner_fails(pool: PgPool) -> Result<()> {
-    // 准备
     let app = setup_test_app(pool.clone()).await;
     let (_owner_token, owner_id) = register_and_login_new_user(&app).await?;
-    let post_to_delete = seed_one_post(&pool, owner_id, "不让他人删除的帖子", true).await?;
+    let post_to_delete = seed_one_post(&pool, owner_id, "不让他人删除的帖子", "c", true).await?;
     let (attacker_token, _attacker_id) = register_and_login_new_user(&app).await?;
 
-    // 执行: 用户B尝试删除用户A的帖子
     let request = Request::builder()
         .method(Method::DELETE)
         .uri(format!("/posts/{}", post_to_delete.id))
@@ -625,7 +612,6 @@ async fn test_delete_post_not_owner_fails(pool: PgPool) -> Result<()> {
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
-    // 断言
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     Ok(())

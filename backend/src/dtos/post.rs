@@ -39,7 +39,8 @@ pub struct PostDetailDto {
     pub id: Uuid,
     pub slug: String,
     pub title: String,
-    pub content: String,
+    pub content_markdown: String, // 用于存放原始 Markdown
+    pub content_html: String,     // 用于存放渲染后的 HTML
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>,

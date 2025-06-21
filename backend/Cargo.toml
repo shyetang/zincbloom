@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8",features = ["json","macros"] }
+axum = { version = "0.8", features = ["json", "macros"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -29,8 +29,9 @@ argon2 = "0.5.3"
 jsonwebtoken = "9.3.1"
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 blake3 = "1.8.2"
-rand = { version = "0.9.1",features = ["thread_rng"] }
+rand = { version = "0.9.1", features = ["thread_rng"] }
 lettre = { version = "0.11.17", features = ["tokio1-native-tls"] }
+comrak = "0.39.0"
 [dev-dependencies]
 anyhow = "1.0"
 serde_json = "1"
