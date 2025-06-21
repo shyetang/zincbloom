@@ -1,6 +1,7 @@
 use crate::dtos::post::{CreatePostPayload, PostDetailDto, UpdatePostPayload};
 use crate::dtos::{PaginatedResponse, Pagination};
 use crate::repositories::{CategoryRepository, PostRepository, TagRepository};
+use crate::utils::markdown_to_html_safe;
 use anyhow::{anyhow, Context, Ok, Result};
 use slug::slugify;
 use std::sync::Arc;
@@ -99,13 +100,17 @@ impl PostService {
                 created_post_basic.id
             ))?;
 
+        // markdown转换
+        let rendered_html = markdown_to_html_safe(&created_post_basic.content);
+
         let post_detail_dto = PostDetailDto {
             id: created_post_basic.id,
             slug: created_post_basic.slug,
             title: created_post_basic.title,
-            content: created_post_basic.content,
+            content_markdown: created_post_basic.content,
+            content_html: rendered_html,
             created_at: created_post_basic.created_at,
-            updated_at: created_post_basic.created_at,
+            updated_at: created_post_basic.updated_at,
             published_at: created_post_basic.published_at,
             categories: if categories.is_empty() {
                 None
@@ -126,6 +131,10 @@ impl PostService {
             .context(format!("Service未能通过id: ({})获取帖子基本信息", id))?
             .ok_or_else(|| anyhow!("未找到 ID 为 {} 的帖子", id))?;
 
+        // --- Markdown 转换 ---
+        // 从 post.content(原始Markdown)渲染出 HTML
+        let rendered_html = markdown_to_html_safe(&post.content);
+
         let categories = self
             .repo
             .get_categories_for_post(post.id)
@@ -141,9 +150,10 @@ impl PostService {
             id: post.id,
             slug: post.slug,
             title: post.title,
-            content: post.content,
+            content_markdown: post.content,
+            content_html: rendered_html,
             created_at: post.created_at,
-            updated_at: post.created_at,
+            updated_at: post.updated_at,
             published_at: post.published_at,
             categories: if categories.is_empty() {
                 None
@@ -164,6 +174,10 @@ impl PostService {
             .context(format!("Service未能通过 slug ({}) 获取帖子基本信息", slug))?
             .ok_or_else(|| anyhow!("未找到 slug 为 '{}' 的帖子", slug))?;
 
+        // --- Markdown 转换 ---
+        // 从 post.content(原始Markdown)渲染出 HTML
+        let rendered_html = markdown_to_html_safe(&post.content);
+
         let categories = self
             .repo
             .get_categories_for_post(post.id)
@@ -179,9 +193,10 @@ impl PostService {
             id: post.id,
             slug: post.slug,
             title: post.title,
-            content: post.content,
+            content_markdown: post.content,
+            content_html: rendered_html,
             created_at: post.created_at,
-            updated_at: post.created_at,
+            updated_at: post.updated_at,
             published_at: post.published_at,
             categories: if categories.is_empty() {
                 None
@@ -209,7 +224,7 @@ impl PostService {
             .repo
             .list(limit, offset)
             .await
-            .context("Service 未能获取分页的帖子列表(基本信息）")?;
+            .context("Service 未能获取分页的帖子列表(基本信息)")?;
 
         // 2. 为每个帖子获取其关联的分类和标签 (N+1 查询问题警告)
         let mut post_details_list = Vec::with_capacity(posts.len());
@@ -225,13 +240,18 @@ impl PostService {
                 .get_tags_for_post(post.id)
                 .await
                 .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
+
+            // markdown转换
+            let rendered_html = markdown_to_html_safe(&post.content);
+
             let post_detail_dto = PostDetailDto {
                 id: post.id,
                 slug: post.slug,
                 title: post.title,
-                content: post.content,
+                content_markdown: post.content,
+                content_html: rendered_html,
                 created_at: post.created_at,
-                updated_at: post.created_at,
+                updated_at: post.updated_at,
                 published_at: post.published_at,
                 categories: if categories.is_empty() {
                     None
@@ -271,6 +291,7 @@ impl PostService {
         } else {
             None
         };
+
         // repo.update 返回基本的 Post 对象，它已经处理了关联表的更新
         let post = self
             .repo
@@ -280,6 +301,10 @@ impl PostService {
                 "Service 未能更新帖子 (id: {}) 的基本信息和关联",
                 id
             ))?;
+
+        // markdown转换
+        let rendered_html = markdown_to_html_safe(&post.content);
+
         // 更新成功后，获取完整的 PostDetailDto
         let categories = self
             .repo
@@ -291,11 +316,13 @@ impl PostService {
             .get_tags_for_post(post.id)
             .await
             .context(format!("获取更新后帖子 {} 的标签失败", post.id))?;
+
         let post_detail_dto = PostDetailDto {
             id: post.id,
             slug: post.slug,
             title: post.title,
-            content: post.content,
+            content_markdown: post.content,
+            content_html: rendered_html,
             created_at: post.created_at,
             updated_at: post.created_at,
             published_at: post.published_at,
@@ -316,9 +343,12 @@ impl PostService {
             .await
             .context(format!("Service未能删除帖子 (id: {})", id))
     }
-    
+
     // 获取 post 的作者 id
-    pub async fn get_post_author(&self,post_id: Uuid) -> Result<Option<Uuid>> {
-        self.repo.get_author_id(post_id).await.context("Service层获取作者ID失败")
+    pub async fn get_post_author(&self, post_id: Uuid) -> Result<Option<Uuid>> {
+        self.repo
+            .get_author_id(post_id)
+            .await
+            .context("Service层获取作者ID失败")
     }
 }
