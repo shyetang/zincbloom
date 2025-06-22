@@ -1,26 +1,79 @@
-# Rust / Cargo
-target
-#backend/Cargo.lock  # 对于应用项目，通常建议提交 Cargo.lock；如果是库项目，则忽略
+# ===================================================================
+#  通用规则 (OS, IDE, Editors)
+# ===================================================================
+# macOS
+.DS_Store
 
-# IDE / Editor specific
-.vscode/
+# Windows
+Thumbs.db
+
+# IDE & Editor specific
 .idea/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
-# OS specific
-.DS_Store
-Thumbs.db
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 
-# Environment variables file (不应提交敏感信息)
-backend/.env
-.env
-.env.*
-# SQLx offline data (如果你选择不跟踪它，但通常建议跟踪)
-# sqlx-data.json
+# ===================================================================
+#  通用依赖 & 日志文件
+# ===================================================================
+# Dependency directories
+node_modules/
 
 # Log files
+logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Other temporary files
 *~
+
+# ===================================================================
+#  后端 (Rust / Cargo)
+# ===================================================================
+/target/
+# 对于应用项目，通常建议提交 Cargo.lock；如果是库项目，则忽略
+# /backend/Cargo.lock
+
+# ===================================================================
+#  前端 (frontend-admin)
+# ===================================================================
+# Build output
+/frontend-admin/dist/
+/frontend-admin/dist-ssr/
+
+# Test coverage
+/frontend-admin/coverage/
+
+# Cypress testing artifacts
+/frontend-admin/cypress/videos/
+/frontend-admin/cypress/screenshots/
+
+# TypeScript build cache
+/frontend-admin/*.tsbuildinfo
+
+# ===================================================================
+#  环境变量 (!!! 不应提交敏感信息 !!!)
+# ===================================================================
+# 忽略所有 .env 文件
+.env
+.env.*
+
+# 但不忽略 .env.example 模板文件
+!*.env.example
+!**/.env.example
+
+# 特别是 .local 文件，它们永远不该被提交
+*.local
+**/*.local
