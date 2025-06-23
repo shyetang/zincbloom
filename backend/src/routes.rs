@@ -26,7 +26,7 @@ pub fn create_router(app_state: AppState) -> Router {
         // --- Admin 相关的路由 ---
         .route("/admin/users/{id}/roles", put(set_user_roles_handler))
         .route(
-            "/admin/users/{role_id}/permissions",
+            "/admin/roles/{role_id}/permissions",
             put(set_role_permissions_handler),
         )
         .route("/admin/users", get(list_users_handler))
