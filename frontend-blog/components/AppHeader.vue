@@ -72,7 +72,11 @@
 
                     <!-- 未登录状态 -->
                     <div v-else class="flex items-center space-x-2">
-                        <UButton to="/auth/login" variant="ghost" color="neutral">
+                        <UButton
+                            to="/auth/login"
+                            variant="ghost"
+                            color="neutral"
+                        >
                             登录
                         </UButton>
                         <UButton to="/auth/register" color="primary">
@@ -136,15 +140,26 @@
                                 欢迎，{{ authStore.user?.username }}
                             </div>
                             <div class="space-y-1">
-                                <NuxtLink
+                                <template
                                     v-for="item in userMenuItems[0]"
                                     :key="item.label"
-                                    :to="item.to"
-                                    class="block py-1 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                                    @click="closeMobileMenu"
                                 >
-                                    {{ item.label }}
-                                </NuxtLink>
+                                    <NuxtLink
+                                        v-if="'to' in item"
+                                        :to="item.to"
+                                        class="block py-1 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                                        @click="closeMobileMenu"
+                                    >
+                                        {{ item.label }}
+                                    </NuxtLink>
+                                    <button
+                                        v-else
+                                        class="block py-1 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white w-full text-left"
+                                        @click="item.click"
+                                    >
+                                        {{ item.label }}
+                                    </button>
+                                </template>
                             </div>
                         </div>
                         <div v-else class="flex flex-col space-y-2">
@@ -189,16 +204,12 @@
 </template>
 
 <script setup lang="ts">
-import type { DropdownItem } from '~/types/ui';
-
-// 由于找不到“~/types/ui”，暂时移除类型导入或请确保该路径存在
-// import type { DropdownItem } from "~/types/ui";
-
 // 状态管理
 const authStore = useAuthStore();
 const colorMode = useColorMode();
+const router = useRouter();
 
-// 响应式状态
+// 响应式数据
 const searchQuery = ref("");
 const isMobileMenuOpen = ref(false);
 
@@ -209,13 +220,12 @@ const isDark = computed(() => colorMode.value === "dark");
 const navigationItems = [
     { name: "首页", href: "/" },
     { name: "文章", href: "/posts" },
-    { name: "分类", href: "/categories" },
     { name: "标签", href: "/tags" },
     { name: "关于", href: "/about" },
 ];
 
 // 用户菜单项
-const userMenuItems = computed((): DropdownItem[][] => [
+const userMenuItems = computed(() => [
     [
         {
             label: "个人资料",
@@ -264,18 +274,25 @@ const closeMobileMenu = () => {
 
 const handleSearch = () => {
     if (searchQuery.value.trim()) {
-        navigateTo(`/search?q=${encodeURIComponent(searchQuery.value)}`);
-        searchQuery.value = "";
+        router.push({
+            path: "/posts",
+            query: { search: searchQuery.value.trim() },
+        });
         closeMobileMenu();
     }
 };
 
 const handleLogout = async () => {
-    await authStore.logout();
-    closeMobileMenu();
+    try {
+        await authStore.logout();
+        router.push("/");
+        closeMobileMenu();
+    } catch (error) {
+        console.error("退出登录失败:", error);
+    }
 };
 
-// 监听路由变化，关闭移动端菜单
+// 监听路由变化自动关闭移动端菜单
 watch(
     () => useRoute().path,
     () => {
