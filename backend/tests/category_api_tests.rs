@@ -110,6 +110,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         post_repo.clone(),
         category_repo.clone(),
         tag_repo.clone(),
+        user_repo.clone(),
     ));
     let app_state = AppState {
         post_service,

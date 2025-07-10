@@ -98,7 +98,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         role_repo.clone(),
         permission_repo,
     ));
-    let user_service = Arc::new(UserService::new(user_repo));
+    let user_service = Arc::new(UserService::new(user_repo.clone()));
     let post_service = Arc::new(PostService::new(
         Arc::new(backend::repositories::PostgresPostRepository::new(
             pool.clone(),
@@ -109,6 +109,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         Arc::new(backend::repositories::PostgresTagRepository::new(
             pool.clone(),
         )),
+        user_repo.clone(),
     ));
 
     let app_state = AppState {

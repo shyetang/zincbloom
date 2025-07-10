@@ -1,15 +1,15 @@
 use anyhow::{Context, Result};
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use backend::utils::hash_password;
 use backend::{
     config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
     dtos::{
-        post::{CreatePostPayload, PostDetailDto, UpdatePostPayload},
         PaginatedResponse,
+        post::{CreatePostPayload, PostDetailDto, UpdatePostPayload},
     },
     handlers::AppState,
     models::{Category, Post, Role, Tag, User},
@@ -122,6 +122,7 @@ async fn setup_test_app(pool: PgPool) -> Router {
         post_repo.clone(),
         category_repo.clone(),
         tag_repo.clone(),
+        user_repo.clone(),
     ));
 
     // 4. 创建完整的 AppState
