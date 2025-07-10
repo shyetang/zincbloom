@@ -1,6 +1,6 @@
 use anyhow::anyhow;
-use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 // 密码哈希(使用 argon2id)
@@ -56,7 +56,7 @@ pub fn validate_password_strength(password: &str) -> anyhow::Result<()> {
     if !password.chars().any(|c| c.is_ascii_digit()) {
         return Err(anyhow!("密码无效：必须包含至少一个数字"));
     }
-    if !password.chars().any(|c| c.is_alphanumeric()) {
+    if !password.chars().any(|c| !c.is_alphanumeric()) {
         return Err(anyhow!("密码无效：必须包含至少一个特殊字符"));
     }
     Ok(())

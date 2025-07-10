@@ -124,8 +124,8 @@ impl From<AnyhowError> for ApiError {
     }
 }
 
-impl From<ConfigError> for ApiError {
+/* impl From<ConfigError> for ApiError {
     fn from(error: ConfigError) -> Self {
         ApiError(error.into())
     }
-}
+} */

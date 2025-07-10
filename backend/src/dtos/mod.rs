@@ -7,13 +7,6 @@ pub mod post;
 pub mod tag;
 pub mod user;
 
-pub use admin::{CreatePermissionPayload, CreateRolePayload, SetRolePermissionsPayload, SetUserRolesPayload, UpdatePermissionPayload, UpdateRolePayload, UserLoginPayload, UserRegistrationPayload};
-pub use auth::{LoginResponsePayload, RefreshTokenPayload, VerifyEmailPayload};
-pub use category::{CreateCategoryPayload, UpdateCategoryPayload};
-pub use post::{CreatePostPayload, UpdatePostPayload};
-pub use tag::{CreateTagPayload, UpdateTagPayload};
-pub use user::UpdateProfilePayload;
-
 // 用于接收分页查询参数的结构体
 #[derive(Debug, Deserialize)]
 pub struct Pagination {

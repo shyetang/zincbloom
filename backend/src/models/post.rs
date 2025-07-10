@@ -14,4 +14,25 @@ pub struct Post {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>, // 使用Option表示文章可能为草稿状态
+
+    // 草稿分享相关字段
+    #[sqlx(default)]
+    pub draft_shared_with: Option<Vec<Uuid>>, // 分享给哪些用户（UUID数组）
+    #[sqlx(default)]
+    pub is_draft_public: Option<bool>, // 是否允许有权限的编辑查看
+    
+    // 文章封禁状态
+    #[sqlx(default)]
+    pub is_banned: Option<bool>, // 是否被管理员封禁
+}
+
+// 草稿访问日志模型
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct DraftAccessLog {
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub accessed_by: Uuid,
+    pub access_type: String,           // 'view', 'edit', 'delete'
+    pub access_reason: Option<String>, // 访问原因说明
+    pub created_at: DateTime<Utc>,
 }

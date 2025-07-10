@@ -1,4 +1,5 @@
-use crate::dtos::{UpdateProfilePayload, UserRegistrationPayload};
+use crate::dtos::admin::UserRegistrationPayload;
+use crate::dtos::user::UpdateProfilePayload;
 use crate::models::{Permission, Role, User, UserPublic};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -32,7 +33,13 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_id(&self, user_id: Uuid) -> Result<Option<User>>;
     // 给用户分配角色
     async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>;
-    async fn assign_roles_to_user_in_tx(&self, tx: &mut Transaction<'_, Postgres>, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>;
+    // 在事务中给用户分配角色
+    async fn assign_roles_to_user_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        user_id: Uuid,
+        role_ids: &[Uuid],
+    ) -> Result<()>;
     // 从用户移除角色
     async fn remove_role_from_user(&self, user_id: Uuid, role_id: Uuid) -> Result<()>;
     // 设置用户的角色列表（先清空后添加）
@@ -68,6 +75,23 @@ pub trait UserRepository: Send + Sync {
 
     // 更新 email_verified_at 字段
     async fn mark_email_as_verified(&self, user_id: Uuid) -> Result<()>;
+
+    // 管理员创建用户（可指定是否邮箱已验证）
+    async fn create_user(
+        &self,
+        username: &str,
+        email: &str,
+        hashed_password: &str,
+        email_verified: bool,
+    ) -> Result<User>;
+
+    // 统计方法
+    async fn get_user_statistics(&self) -> Result<crate::dtos::admin::UserStats>;
+    async fn get_total_post_count(&self) -> Result<i64>;
+    async fn get_published_post_count(&self) -> Result<i64>;
+    async fn get_draft_post_count(&self) -> Result<i64>;
+    async fn get_category_count(&self) -> Result<i64>;
+    async fn get_tag_count(&self) -> Result<i64>;
 }
 
 // UserRepository 的 PostgreSQL 具体实现
@@ -93,8 +117,7 @@ impl UserRepository for PostgresUserRepository {
         &self,
         payload: &UserRegistrationPayload,
         hashed_password: &str,
-    ) -> Result<User>
-    {
+    ) -> Result<User> {
         let user_id = Uuid::new_v4();
         let user = sqlx::query_as!(
             User,
@@ -108,14 +131,19 @@ impl UserRepository for PostgresUserRepository {
             payload.email,
             hashed_password
         )
-            .fetch_one(&self.pool)
-            .await
-            .context("创建User失败")?;
+        .fetch_one(&self.pool)
+        .await
+        .context("创建User失败")?;
 
         Ok(user)
     }
 
-    async fn create_in_tx(&self, tx: &mut Transaction<'_, Postgres>, payload: &UserRegistrationPayload, hashed_password: &str) -> Result<User> {
+    async fn create_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        payload: &UserRegistrationPayload,
+        hashed_password: &str,
+    ) -> Result<User> {
         let user_id = Uuid::new_v4();
         let user = sqlx::query_as!(
             User,
@@ -129,9 +157,9 @@ impl UserRepository for PostgresUserRepository {
             payload.email,
             hashed_password
         )
-            .fetch_one(&mut **tx)
-            .await
-            .context("创建User失败")?;
+        .fetch_one(&mut **tx)
+        .await
+        .context("创建User失败")?;
 
         Ok(user)
     }
@@ -146,9 +174,9 @@ impl UserRepository for PostgresUserRepository {
             "#,
             username
         )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("根据 {} 查找用户失败", username))?;
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("根据 {} 查找用户失败", username))?;
 
         Ok(user)
     }
@@ -163,9 +191,9 @@ impl UserRepository for PostgresUserRepository {
             "#,
             email
         )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("根据 {} 查找用户失败 ", email))?;
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("根据 {} 查找用户失败 ", email))?;
 
         Ok(user)
     }
@@ -180,15 +208,14 @@ impl UserRepository for PostgresUserRepository {
             "#,
             user_id
         )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("根据用户id {} 查找用户失败 ", user_id))?;
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("根据用户id {} 查找用户失败 ", user_id))?;
 
         Ok(user)
     }
 
-    async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()>
-    {
+    async fn assign_roles_to_user(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
         if role_ids.is_empty() {
             return Ok(());
         }
@@ -200,13 +227,18 @@ impl UserRepository for PostgresUserRepository {
             user_id,
             role_ids,
         )
-            .execute(&self.pool)
-            .await
-            .context(format!("给用户id {} 分配角色失败", user_id))?;
+        .execute(&self.pool)
+        .await
+        .context(format!("给用户id {} 分配角色失败", user_id))?;
         Ok(())
     }
 
-    async fn assign_roles_to_user_in_tx(&self, tx: &mut Transaction<'_, Postgres>, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
+    async fn assign_roles_to_user_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        user_id: Uuid,
+        role_ids: &[Uuid],
+    ) -> Result<()> {
         if role_ids.is_empty() {
             return Ok(());
         }
@@ -218,9 +250,9 @@ impl UserRepository for PostgresUserRepository {
             user_id,
             role_ids,
         )
-            .execute(&mut **tx)
-            .await
-            .context(format!("给用户id {} 分配角色失败", user_id))?;
+        .execute(&mut **tx)
+        .await
+        .context(format!("给用户id {} 分配角色失败", user_id))?;
         Ok(())
     }
 
@@ -230,15 +262,15 @@ impl UserRepository for PostgresUserRepository {
             user_id,
             role_id
         )
-            .execute(&self.pool)
-            .await
-            .context(format!("为用户id {} 移除 角色id {} 失败", user_id, role_id))?;
+        .execute(&self.pool)
+        .await
+        .context(format!("为用户id {} 移除 角色id {} 失败", user_id, role_id))?;
 
         Ok(())
     }
 
     async fn set_user_roles(&self, user_id: Uuid, role_ids: &[Uuid]) -> Result<()> {
-        // 在单个事务中执行“先删除后添加”的操作，确保原子性
+        // 在单个事务中执行"先删除后添加"的操作，确保原子性
         let mut tx = self.pool.begin().await.context("开启数据库事务失败")?;
         // 1. 删除该用户所有已存在的角色
         sqlx::query!("delete from user_roles where user_id = $1", user_id)
@@ -256,9 +288,9 @@ impl UserRepository for PostgresUserRepository {
                 user_id,
                 role_ids
             )
-                .execute(&mut *tx)
-                .await
-                .context("插入新用户角色失败")?;
+            .execute(&mut *tx)
+            .await
+            .context("插入新用户角色失败")?;
         }
 
         // 3 提交事务
@@ -279,9 +311,9 @@ impl UserRepository for PostgresUserRepository {
             "#,
             user_id
         )
-            .fetch_all(&self.pool)
-            .await
-            .context("获取用户ID {} 所有角色失败")?;
+        .fetch_all(&self.pool)
+        .await
+        .context("获取用户ID {} 所有角色失败")?;
 
         Ok(roles)
     }
@@ -299,9 +331,9 @@ impl UserRepository for PostgresUserRepository {
             "#,
             user_id
         )
-            .fetch_all(&self.pool)
-            .await
-            .context(format!("获取用户ID {} 的所有权限失败", user_id))?;
+        .fetch_all(&self.pool)
+        .await
+        .context(format!("获取用户ID {} 的所有权限失败", user_id))?;
 
         Ok(permissions)
     }
@@ -318,9 +350,9 @@ impl UserRepository for PostgresUserRepository {
             user_id,
             expires_at
         )
-            .execute(&self.pool)
-            .await
-            .context("存储用户刷新令牌失败")?;
+        .execute(&self.pool)
+        .await
+        .context("存储用户刷新令牌失败")?;
 
         Ok(())
     }
@@ -348,13 +380,13 @@ impl UserRepository for PostgresUserRepository {
             "delete from refresh_tokens where token_hash = $1",
             token_hash
         )
-            .execute(&self.pool)
-            .await
-            .context("删除用户刷新令牌失败")?;
+        .execute(&self.pool)
+        .await
+        .context("删除用户刷新令牌失败")?;
 
         // 如果没有行被删除，可能意味着 token 已经被撤销或不存在，这通常不是一个需要向上传播的错误
         if result.rows_affected() == 0 {
-            tracing::warn!("尝试删除一个不存在或已过期的 refresh token: {}", token_hash);
+            tracing::debug!("尝试删除一个不存在或已过期的 refresh token: {}", token_hash);
         }
 
         Ok(())
@@ -368,9 +400,9 @@ impl UserRepository for PostgresUserRepository {
             from users order by username
             "#
         )
-            .fetch_all(&self.pool)
-            .await
-            .context("数据库层查询用户列表失败")
+        .fetch_all(&self.pool)
+        .await
+        .context("数据库层查询用户列表失败")
     }
 
     async fn list_with_roles(&self) -> Result<Vec<UserPublic>> {
@@ -407,7 +439,9 @@ impl UserRepository for PostgresUserRepository {
     }
 
     async fn update(&self, user_id: Uuid, payload: &UpdateProfilePayload) -> Result<User> {
-        let mut user = self.find_by_id(user_id).await?
+        let mut user = self
+            .find_by_id(user_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("未找到ID为 {} 的用户", user_id))?;
 
         if let Some(username) = &payload.username {
@@ -428,10 +462,9 @@ impl UserRepository for PostgresUserRepository {
             user.username,
             user.email,
             user_id,
-            
         )
-            .fetch_one(&self.pool)
-            .await?;
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(updated_user)
     }
@@ -444,7 +477,10 @@ impl UserRepository for PostgresUserRepository {
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow::anyhow!("尝试删除用户失败：未找到ID为 {} 的用户", user_id));
+            return Err(anyhow::anyhow!(
+                "尝试删除用户失败：未找到ID为 {} 的用户",
+                user_id
+            ));
         }
         Ok(())
     }
@@ -455,8 +491,8 @@ impl UserRepository for PostgresUserRepository {
             new_hashed_password,
             user_id
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -473,9 +509,136 @@ impl UserRepository for PostgresUserRepository {
             "update users set email_verified_at = now() where id = $1",
             user_id
         )
-            .execute(&self.pool)
-            .await?;
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
+    }
+
+    async fn create_user(
+        &self,
+        username: &str,
+        email: &str,
+        hashed_password: &str,
+        email_verified: bool,
+    ) -> Result<User> {
+        let user_id = Uuid::new_v4();
+        let email_verified_at = if email_verified {
+            Some(Utc::now())
+        } else {
+            None
+        };
+
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            INSERT INTO users (id, username, email, hashed_password, email_verified_at)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, username, email, hashed_password, created_at, updated_at, email_verified_at
+            "#,
+            user_id,
+            username,
+            email,
+            hashed_password,
+            email_verified_at
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("管理员创建用户失败")?;
+
+        Ok(user)
+    }
+
+    // 统计方法的实现
+    async fn get_user_statistics(&self) -> Result<crate::dtos::admin::UserStats> {
+        let stats = sqlx::query!(
+            r#"
+            SELECT 
+                COUNT(*) as total,
+                COUNT(email_verified_at) as verified,
+                COUNT(*) - COUNT(email_verified_at) as unverified
+            FROM users
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("获取用户统计失败")?;
+
+        // 获取按角色分组的用户数量
+        let role_stats = sqlx::query!(
+            r#"
+            SELECT 
+                r.name as role_name,
+                COUNT(ur.user_id) as user_count
+            FROM roles r
+            LEFT JOIN user_roles ur ON r.id = ur.role_id
+            GROUP BY r.id, r.name
+            ORDER BY user_count DESC, r.name
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("获取角色用户统计失败")?;
+
+        let by_role = role_stats
+            .into_iter()
+            .map(|row| crate::dtos::admin::RoleUserCount {
+                role_name: row.role_name,
+                user_count: row.user_count.unwrap_or(0),
+            })
+            .collect();
+
+        Ok(crate::dtos::admin::UserStats {
+            total: stats.total.unwrap_or(0),
+            verified: stats.verified.unwrap_or(0),
+            unverified: stats.unverified.unwrap_or(0),
+            by_role,
+        })
+    }
+
+    async fn get_total_post_count(&self) -> Result<i64> {
+        let result = sqlx::query!("SELECT COUNT(*) as count FROM posts")
+            .fetch_one(&self.pool)
+            .await
+            .context("获取文章总数失败")?;
+
+        Ok(result.count.unwrap_or(0))
+    }
+
+    async fn get_published_post_count(&self) -> Result<i64> {
+        let result =
+            sqlx::query!("SELECT COUNT(*) as count FROM posts WHERE published_at IS NOT NULL")
+                .fetch_one(&self.pool)
+                .await
+                .context("获取已发布文章数失败")?;
+
+        Ok(result.count.unwrap_or(0))
+    }
+
+    async fn get_draft_post_count(&self) -> Result<i64> {
+        let result = sqlx::query!("SELECT COUNT(*) as count FROM posts WHERE published_at IS NULL")
+            .fetch_one(&self.pool)
+            .await
+            .context("获取草稿文章数失败")?;
+
+        Ok(result.count.unwrap_or(0))
+    }
+
+    async fn get_category_count(&self) -> Result<i64> {
+        let result = sqlx::query!("SELECT COUNT(*) as count FROM categories")
+            .fetch_one(&self.pool)
+            .await
+            .context("获取分类数失败")?;
+
+        Ok(result.count.unwrap_or(0))
+    }
+
+    async fn get_tag_count(&self) -> Result<i64> {
+        let result = sqlx::query!("SELECT COUNT(*) as count FROM tags")
+            .fetch_one(&self.pool)
+            .await
+            .context("获取标签数失败")?;
+
+        Ok(result.count.unwrap_or(0))
     }
 }

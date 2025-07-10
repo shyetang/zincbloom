@@ -1,20 +1,20 @@
 use crate::config::AppConfig;
+use crate::dtos::admin::{UserLoginPayload, UserRegistrationPayload};
 use crate::dtos::auth::ResetPasswordPayload;
-use crate::dtos::{UserLoginPayload, UserRegistrationPayload};
 use crate::models::{User, UserPublic};
 use crate::repositories::{
     LoginAttemptRepository, OneTimeTokenRepository, RoleRepository, UserRepository,
 };
 use crate::services::EmailService;
 use crate::utils::{hash_password, validate_password_strength, verify_password};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
-use rand::distr::Alphanumeric;
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, TokenData, Validation, decode, encode};
 use rand::Rng;
+use rand::distr::Alphanumeric;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing;
 use uuid::Uuid;
 
@@ -42,7 +42,7 @@ pub struct LoginTokens {
 #[derive(Clone)]
 pub struct AuthService {
     user_repo: Arc<dyn UserRepository>,
-    role_repo: Arc<dyn RoleRepository>, // 在注册时分配默认角色，需要 RoleRepository
+    role_repo: Arc<dyn RoleRepository>,
     login_attempt_repo: Arc<dyn LoginAttemptRepository>,
     one_time_token_repo: Arc<dyn OneTimeTokenRepository>,
     email_service: Arc<EmailService>,
@@ -116,7 +116,7 @@ impl AuthService {
         }
     }
 
-    // 用户注册服务方法
+    // 用户注册服务方法(在事务中进行)
     pub async fn register_user(&self, payload: UserRegistrationPayload) -> Result<UserPublic> {
         // 验证密码策略
         validate_password_strength(&payload.password).context("用户注册时密码强度验证失败")?;
@@ -151,19 +151,19 @@ impl AuthService {
             .create_in_tx(&mut tx, &payload, &hashed_password)
             .await?;
 
-        match self.role_repo.find_by_name("user").await {
-            Ok(Some(user_role)) => {
+        match self.role_repo.find_by_name("author").await {
+            Ok(Some(author_role)) => {
                 self.user_repo
-                    .assign_roles_to_user_in_tx(&mut tx, new_user.id, &[user_role.id])
+                    .assign_roles_to_user_in_tx(&mut tx, new_user.id, &[author_role.id])
                     .await
                     .context(format!("为用户 '{}' 分配默认角色失败", new_user.username))?;
-                tracing::info!("成功为新用户 {} 分配 'user' 角色", new_user.username);
+                tracing::info!("成功为新用户 {} 分配 'author' 角色", new_user.username);
             }
             Ok(None) => {
-                tracing::info!("关键配置缺失: 默认的 'user' 角色在数据库中未找到。");
+                tracing::info!("关键配置缺失: 默认的 'author' 角色在数据库中未找到。");
                 return Err(anyhow!("服务器内部配置错误，无法完成注册。"));
             }
-            Err(e) => return Err(e).context("查找默认 'user' 角色时发生数据库错误"),
+            Err(e) => return Err(e).context("查找默认 'author' 角色时发生数据库错误"),
         }
         let roles_assigned = self.user_repo.get_user_roles(new_user.id).await?;
         let role_names = roles_assigned.into_iter().map(|r| r.name).collect();
@@ -194,13 +194,15 @@ impl AuthService {
             new_user.username, verification_link
         );
 
-        // 发送邮件
-        self.email_service
-            .send_email(&new_user.email, email_subject, &email_body)
-            .await?;
-
-        // 提交事务
+        // 提交事务（在发送邮件之前提交，确保邮件失败不会影响用户创建）
         tx.commit().await.context("提交注册事务失败")?;
+
+        // 发送邮件（如果失败，记录警告但不阻止注册）
+        if let Err(e) = self.email_service
+            .send_email(&new_user.email, email_subject, &email_body)
+            .await {
+            tracing::warn!("注册邮件发送失败，用户 {} 已创建但未发送验证邮件: {}", new_user.username, e);
+        }
 
         tracing::info!("用户 {} 注册成功并提交事务", new_user.username);
 
@@ -442,7 +444,7 @@ impl AuthService {
             .ok_or_else(|| anyhow!("密码重置失败：无效、已过期或已使用的令牌"))?;
 
         // 哈希新密码并更新到数据库
-        let new_hashed_password = hash_token(&payload.new_password);
+        let new_hashed_password = hash_password(&payload.new_password)?;
         self.user_repo
             .update_password(user_id, &new_hashed_password)
             .await?;

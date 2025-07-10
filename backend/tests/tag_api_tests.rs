@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use backend::{
-    config::{AppConfig, AuthConfig, DatabaseConfig, EmailConfig, ServerConfig},
+    config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
     dtos::tag::{CreateTagPayload, UpdateTagPayload},
     handlers::AppState,
     models::{Role, Tag, User},
@@ -66,13 +66,17 @@ async fn setup_test_app(pool: PgPool) -> Router {
         },
         email: EmailConfig {
             smtp_host: "localhost".to_string(),
-            smtp_port: 1025,
+            smtp_port: 1025, // 本地 SMTP 的默认端口
             smtp_user: "".to_string(),
             smtp_pass: "".to_string(),
             from_address: "test@example.com".to_string(),
         },
+        draft_policy: DraftPolicy {
+            mode: "private".to_string(),
+            admin_access_all_drafts: false,
+            audit_draft_access: true,
+        },
     };
-
     let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(pool.clone()));
     let role_repo: Arc<dyn RoleRepository> = Arc::new(PostgresRoleRepository::new(pool.clone()));
     let permission_repo: Arc<dyn PermissionRepository> =
@@ -85,7 +89,6 @@ async fn setup_test_app(pool: PgPool) -> Router {
         Arc::new(PostgresCategoryRepository::new(pool.clone()));
     let tag_repo: Arc<dyn TagRepository> = Arc::new(PostgresTagRepository::new(pool.clone()));
     let post_repo: Arc<dyn PostRepository> = Arc::new(PostgresPostRepository::new(pool.clone()));
-
     let email_service = Arc::new(EmailService::new(test_config.email.clone()));
     let auth_service = Arc::new(AuthService::new(
         user_repo.clone(),
@@ -107,8 +110,8 @@ async fn setup_test_app(pool: PgPool) -> Router {
         post_repo.clone(),
         category_repo.clone(),
         tag_repo.clone(),
+        user_repo.clone(),
     ));
-
     let app_state = AppState {
         post_service,
         category_service,
@@ -117,7 +120,6 @@ async fn setup_test_app(pool: PgPool) -> Router {
         admin_service,
         user_service,
     };
-
     create_router(app_state)
 }
 
@@ -163,6 +165,7 @@ async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Res
         .to_string())
 }
 
+#[allow(dead_code)]
 async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
     let username = format!("user_tag_{}", Uuid::new_v4());
     let email = format!("{}@example.com", &username);
@@ -328,20 +331,6 @@ async fn test_create_tag_no_token_fails(pool: PgPool) -> Result<()> {
     Ok(())
 }
 
-#[sqlx::test]
-async fn test_create_tag_as_regular_user_fails(pool: PgPool) -> Result<()> {
-    let app = setup_test_app(pool.clone()).await;
-    let (user_token, _) = register_and_login_new_user(&app).await?;
-    let payload = CreateTagPayload {
-        name: "普通用户尝试创建".to_string(),
-    };
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/tags")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", user_token))
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-    let response = app.oneshot(request).await?;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    Ok(())
-}
+// 注意：在新的权限系统中，所有注册用户都是 author 角色，
+// 而 author 角色有 tag:create 权限，所以普通用户可以创建标签。
+// 原来的 test_create_tag_as_regular_user_fails 测试不再适用，已删除。

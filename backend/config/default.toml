@@ -8,3 +8,13 @@ url = "postgres://xinlong:@localhost/my-blog"
 # [server]
 # port = 8080
 # host = "127.0.0.1"
+
+[draft_policy]
+# "private" | "team_collaborative" | "traditional"
+mode = "private"  
+
+# 是否允许管理员查看所有草稿
+admin_access_all_drafts = false
+
+# 是否记录草稿访问日志
+audit_draft_access = true

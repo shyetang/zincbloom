@@ -7,7 +7,7 @@ pub mod user;
 
 pub use category::Category;
 pub use permission::Permission;
-pub use post::Post;
+pub use post::{DraftAccessLog, Post};
 pub use role::Role;
 pub use tag::Tag;
 pub use user::{User, UserPublic};
