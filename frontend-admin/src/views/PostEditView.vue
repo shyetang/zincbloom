@@ -235,8 +235,8 @@ const canSaveDraft = () => {
 }
 
 // 是否为查看模式（没有编辑权限）
-const isViewOnly = () => {
-  return isEdit && post.value && !post.value.can_edit
+const isViewOnly = (): boolean => {
+  return isEdit && post.value ? !post.value.can_edit : false
 }
 
 onMounted(() => {
@@ -254,16 +254,14 @@ onMounted(() => {
       <div class="page-header">
         <div class="page-title">
           <h1>
-            {{
-              isEdit
-                ? (isViewOnly() ? '查看文章' : '编辑文章')
-                : '写新文章'
-            }}
+            {{ isEdit ? (isViewOnly() ? '查看文章' : '编辑文章') : '写新文章' }}
           </h1>
           <p class="page-subtitle">
             {{
               isEdit
-                ? (isViewOnly() ? '只读模式 - 您只能查看此文章内容' : '修改并更新您的文章内容')
+                ? isViewOnly()
+                  ? '只读模式 - 您只能查看此文章内容'
+                  : '修改并更新您的文章内容'
                 : '创建一篇新的博客文章'
             }}
           </p>
@@ -376,7 +374,20 @@ onMounted(() => {
 
                 <!-- 文章状态信息 -->
                 <div v-if="post" class="publish-status">
-                  <div v-if="post.published_at" class="status-section">
+                  <!-- 封禁状态显示 -->
+                  <div v-if="post.is_banned" class="status-section ban-status">
+                    <div class="status-item">
+                      <span class="status-label">状态:</span>
+                      <span class="badge badge-danger">已封禁</span>
+                    </div>
+                    <div class="ban-notice">
+                      <p class="text-sm text-red-700">
+                        此文章已被管理员封禁，只有作者和管理员可以查看。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div v-else-if="post.published_at" class="status-section">
                     <div class="status-item">
                       <span class="status-label">状态:</span>
                       <span class="badge badge-success">已发布</span>
@@ -442,7 +453,9 @@ onMounted(() => {
                   </label>
                 </div>
                 <div v-if="categories.length === 0" class="empty-notice">
-                  暂无分类，<router-link v-if="!isViewOnly()" to="/categories">去创建分类</router-link>
+                  暂无分类，<router-link v-if="!isViewOnly()" to="/categories"
+                    >去创建分类</router-link
+                  >
                   <span v-else>暂无分类</span>
                 </div>
               </div>
@@ -928,5 +941,30 @@ onMounted(() => {
 
 .text-sm {
   font-size: 0.875rem;
+}
+
+/* 封禁状态样式 */
+.ban-status {
+  background-color: var(--color-red-50, #fef2f2);
+  border: 1px solid var(--color-red-200, #fecaca);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-4);
+}
+
+.ban-notice {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  background-color: var(--color-red-100, #fee2e2);
+  border-radius: var(--border-radius-sm);
+}
+
+.badge-danger {
+  background-color: var(--color-red-100, #fef2f2);
+  color: var(--color-red-800, #991b1b);
+  border: 1px solid var(--color-red-200, #fecaca);
+}
+
+.text-red-700 {
+  color: var(--color-red-700, #b91c1c);
 }
 </style>

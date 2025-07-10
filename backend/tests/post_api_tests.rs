@@ -269,9 +269,9 @@ async fn seed_one_post(
     let post = sqlx::query_as!(
         Post,
         r#"
-        INSERT INTO posts (id, slug, title, content, author_id, published_at, draft_shared_with, is_draft_public)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING id, slug, title, content, author_id, created_at, updated_at, published_at, draft_shared_with, is_draft_public
+        INSERT INTO posts (id, slug, title, content, author_id, published_at, draft_shared_with, is_draft_public,is_banned)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id, slug, title, content, author_id, created_at, updated_at, published_at, draft_shared_with, is_draft_public,is_banned
         "#,
         Uuid::new_v4(),
         slug,
@@ -284,7 +284,8 @@ async fn seed_one_post(
             None
         },
         None::<&[Uuid]>, // draft_shared_with
-        Some(false)      // is_draft_public
+        Some(false),      // is_draft_public
+        false             // is_banned
     )
     .fetch_one(pool)
     .await?;

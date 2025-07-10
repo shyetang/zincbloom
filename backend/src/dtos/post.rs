@@ -52,6 +52,12 @@ pub struct ShareDraftPayload {
     pub message: Option<String>, // 分享时的消息
 }
 
+/// 文章封禁操作DTO
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BanPostPayload {
+    pub reason: Option<String>, // 封禁原因
+}
+
 /// 草稿访问日志DTO
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DraftAccessLogDto {
@@ -100,11 +106,17 @@ pub struct PostDetailDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_accessing_others_draft: Option<bool>, // 标识是否在访问他人的草稿
 
+    // 文章封禁状态
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_banned: Option<bool>, // 是否被封禁
+
     // 当前用户对此文章的操作权限
     pub can_edit: bool,    // 是否可以编辑
     pub can_delete: bool,  // 是否可以删除
     pub can_publish: bool, // 是否可以发布/撤回
     pub can_view_detail: bool, // 是否可以查看详情
+    pub can_ban: bool,     // 是否可以封禁
+    pub can_unban: bool,   // 是否可以解封
 }
 
 /// 分类的简化 DTO,不想在 PostDetailDto 中暴露完整的 Category 模型

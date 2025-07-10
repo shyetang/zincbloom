@@ -95,10 +95,14 @@ impl PostService {
         };
 
         // 设置操作权限
+        let is_banned = post.is_banned.unwrap_or(false);
+
         let can_view_detail = if is_own_post {
-            true // 自己的文章总是可以查看详情
-        } else if is_published {
-            true // 已发布文章所有人都可以查看详情
+            true // 自己的文章总是可以查看详情（包括被封禁的）
+        } else if is_published && !is_banned {
+            true // 已发布且未被封禁的文章所有人都可以查看详情
+        } else if is_published && is_banned && can_read_any {
+            true // 被封禁的文章只有管理员可以查看详情
         } else if can_access_draft {
             true // 有草稿访问权限（分享或公开草稿）
         } else if can_read_any {
@@ -109,26 +113,35 @@ impl PostService {
 
         let can_edit = if is_own_post {
             true // 可以编辑自己的文章
-        } else if is_published && can_read_any {
-            true // 管理员可以编辑他人的已发布文章
+        } else if can_access_draft && !can_read_any {
+            true // 普通用户可以编辑分享给自己的草稿，但管理员不能
         } else {
-            false // 其他情况不允许编辑（包括分享的草稿）
+            false // 管理员不能编辑他人的文章（包括草稿和已发布文章）
         };
 
         let can_delete = if is_own_post {
             true // 可以删除自己的文章
-        } else if is_published && can_read_any {
-            true // 管理员可以删除他人的已发布文章
         } else {
-            false // 其他情况不允许删除（包括分享的草稿）
+            false // 管理员不能删除他人的文章（包括草稿和已发布文章），只能封禁
         };
 
         let can_publish = if is_own_post {
             true // 可以发布/撤回自己的文章
-        } else if is_published && can_read_any {
-            true // 管理员可以发布/撤回他人的已发布文章
         } else {
-            false // 其他情况不允许发布操作（包括分享的草稿）
+            false // 管理员不能发布/撤回他人的文章
+        };
+
+        // 设置封禁相关权限
+        let can_ban = if is_published && can_read_any && !is_own_post {
+            true // 管理员可以封禁他人的已发布文章
+        } else {
+            false
+        };
+
+        let can_unban = if is_published && can_read_any && !is_own_post {
+            true // 管理员可以解封他人的已发布文章
+        } else {
+            false
         };
 
         PostDetailDto {
@@ -160,11 +173,15 @@ impl PostService {
                 None
             },
             is_accessing_others_draft,
+            // 封禁状态
+            is_banned: post.is_banned,
             // 新增的权限字段
             can_edit,
             can_delete,
             can_publish,
             can_view_detail,
+            can_ban,
+            can_unban,
         }
     }
 
@@ -557,10 +574,10 @@ impl PostService {
         let page = pagination.page();
         let page_size = pagination.page_size();
 
-        // 获取已发布的文章列表
+        // 获取已发布的文章列表（公开接口，不包含被封禁的文章）
         let (posts, total_items) = self
             .repo
-            .list_published(limit, offset)
+            .list_published(limit, offset, false)
             .await
             .context("Service 未能获取已发布文章列表")?;
 
@@ -605,7 +622,7 @@ impl PostService {
     pub async fn get_published_post_by_id(&self, id: Uuid) -> Result<PostDetailDto> {
         let post = self
             .repo
-            .get_published_by_id(id)
+            .get_published_by_id(id, false)
             .await
             .context(format!("Service未能通过id: ({})获取已发布文章基本信息", id))?
             .ok_or_else(|| anyhow!("未找到 ID 为 {} 的已发布文章", id))?;
@@ -643,7 +660,7 @@ impl PostService {
     pub async fn get_published_post_by_slug(&self, slug: &str) -> Result<PostDetailDto> {
         let post = self
             .repo
-            .get_published_by_slug(slug)
+            .get_published_by_slug(slug, false)
             .await
             .context(format!(
                 "Service未能通过 slug ({}) 获取已发布文章基本信息",
@@ -880,5 +897,73 @@ impl PostService {
 
         let response = PaginatedResponse::new(post_details_list, total_items, page, page_size);
         Ok(response)
+    }
+
+    // 封禁文章（仅管理员）
+    pub async fn ban_post(&self, post_id: Uuid, user_id: Uuid, can_ban: bool) -> Result<()> {
+        if !can_ban {
+            return Err(anyhow!("您没有权限封禁文章"));
+        }
+
+        // 1. 验证文章是否存在
+        let post = self
+            .repo
+            .get_by_id(post_id)
+            .await
+            .context("获取文章信息失败")?
+            .ok_or_else(|| anyhow!("文章不存在"))?;
+
+        // 2. 检查文章是否已发布
+        if post.published_at.is_none() {
+            return Err(anyhow!("只能封禁已发布的文章"));
+        }
+
+        // 3. 检查文章是否已被封禁
+        if post.is_banned.unwrap_or(false) {
+            return Err(anyhow!("文章已被封禁"));
+        }
+
+        // 4. 执行封禁
+        self.repo.ban_post(post_id).await.context("封禁文章失败")?;
+
+        tracing::info!("管理员 {} 封禁了文章 {}", user_id, post_id);
+        Ok(())
+    }
+
+    // 解封文章（仅管理员）
+    pub async fn unban_post(&self, post_id: Uuid, user_id: Uuid, can_ban: bool) -> Result<()> {
+        if !can_ban {
+            return Err(anyhow!("您没有权限解封文章"));
+        }
+
+        // 1. 验证文章是否存在
+        let post = self
+            .repo
+            .get_by_id(post_id)
+            .await
+            .context("获取文章信息失败")?
+            .ok_or_else(|| anyhow!("文章不存在"))?;
+
+        // 2. 检查文章是否被封禁
+        if !post.is_banned.unwrap_or(false) {
+            return Err(anyhow!("文章未被封禁"));
+        }
+
+        // 3. 执行解封
+        self.repo
+            .unban_post(post_id)
+            .await
+            .context("解封文章失败")?;
+
+        tracing::info!("管理员 {} 解封了文章 {}", user_id, post_id);
+        Ok(())
+    }
+
+    // 检查文章是否被封禁
+    pub async fn is_post_banned(&self, post_id: Uuid) -> Result<bool> {
+        self.repo
+            .is_banned(post_id)
+            .await
+            .context("检查文章封禁状态失败")
     }
 }

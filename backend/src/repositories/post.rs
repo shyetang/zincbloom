@@ -29,11 +29,17 @@ pub trait PostRepository: Send + Sync {
         offset: i64,
     ) -> Result<(Vec<Post>, i64)>;
     // 新增：查询已发布的文章列表（公开接口）
-    async fn list_published(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)>;
+    async fn list_published(
+        &self,
+        limit: i64,
+        offset: i64,
+        include_banned: bool,
+    ) -> Result<(Vec<Post>, i64)>;
     // 新增：根据ID获取已发布的文章
-    async fn get_published_by_id(&self, id: Uuid) -> Result<Option<Post>>;
+    async fn get_published_by_id(&self, id: Uuid, include_banned: bool) -> Result<Option<Post>>;
     // 新增：根据slug获取已发布的文章
-    async fn get_published_by_slug(&self, slug: &str) -> Result<Option<Post>>;
+    async fn get_published_by_slug(&self, slug: &str, include_banned: bool)
+    -> Result<Option<Post>>;
 
     async fn update(
         &self,
@@ -107,6 +113,19 @@ pub trait PostRepository: Send + Sync {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<Post>, i64)>;
+
+    // ================================
+    // 文章封禁相关方法
+    // ================================
+
+    // 封禁文章
+    async fn ban_post(&self, post_id: Uuid) -> Result<()>;
+
+    // 解封文章
+    async fn unban_post(&self, post_id: Uuid) -> Result<()>;
+
+    // 检查文章是否被封禁
+    async fn is_banned(&self, post_id: Uuid) -> Result<bool>;
 }
 
 // Postgres的具体实现
@@ -209,9 +228,9 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            insert into posts (id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public)
-            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-            returning id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public
+            insert into posts (id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public,is_banned)
+            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            returning id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public,is_banned
             "#,
             post_id,
             slug,
@@ -222,7 +241,8 @@ impl PostRepository for PostgresPostRepository {
             None::<DateTime<Utc>>,
             author_id,
             payload.draft_shared_with.as_deref(),
-            payload.is_draft_public
+            payload.is_draft_public,
+            false // 默认不封禁
         )
         .fetch_one(&mut *txn) // 在事务中执行
         .await
@@ -253,7 +273,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public from posts where id = $1
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned from posts where id = $1
             "#,
             id
         )
@@ -267,7 +287,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned
             from posts 
             where slug = $1
             "#,
@@ -284,7 +304,7 @@ impl PostRepository for PostgresPostRepository {
         let posts = sqlx::query_as!(
             Post,
             r#"
-            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public 
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public,is_banned 
             FROM posts 
             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 过滤已发布的
             ORDER BY created_at DESC -- 或者 ORDER BY published_at DESC
@@ -327,7 +347,7 @@ impl PostRepository for PostgresPostRepository {
         let posts = sqlx::query_as!(
             Post,
             r#"
-            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public 
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public,is_banned 
             FROM posts 
             WHERE author_id = $1
             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 过滤已发布的
@@ -360,69 +380,140 @@ impl PostRepository for PostgresPostRepository {
         Ok((posts, total_items))
     }
 
-    async fn list_published(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)> {
+    async fn list_published(
+        &self,
+        limit: i64,
+        offset: i64,
+        include_banned: bool,
+    ) -> Result<(Vec<Post>, i64)> {
         // --- 查询已发布的文章列表 ---
-        let posts = sqlx::query_as!(
-            Post,
-            r#"
-            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public 
-            FROM posts 
-            WHERE published_at IS NOT NULL AND published_at <= NOW()
-            ORDER BY published_at DESC
-            limit $1 offset $2
-            "#,
-            limit,
-            offset
-        )
-            .fetch_all(&self.pool)
-            .await
-            .context("查询已发布文章列表分页数据失败")?;
+        let posts = if include_banned {
+            // 管理员可以看到被封禁的文章
+            sqlx::query_as!(
+                Post,
+                r#"
+                SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public,is_banned 
+                FROM posts 
+                WHERE published_at IS NOT NULL AND published_at <= NOW()
+                ORDER BY published_at DESC
+                limit $1 offset $2
+                "#,
+                limit,
+                offset
+            )
+                .fetch_all(&self.pool)
+                .await
+                .context("查询已发布文章列表分页数据失败")?
+        } else {
+            // 普通用户只能看到未被封禁的文章
+            sqlx::query_as!(
+                Post,
+                r#"
+                SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public,is_banned 
+                FROM posts 
+                WHERE published_at IS NOT NULL AND published_at <= NOW() AND (is_banned = false OR is_banned IS NULL)
+                ORDER BY published_at DESC
+                limit $1 offset $2
+                "#,
+                limit,
+                offset
+            )
+                .fetch_all(&self.pool)
+                .await
+                .context("查询已发布文章列表分页数据失败")?
+        };
 
         // --- 查询已发布文章总数 ---
-        let total_count_result = sqlx::query!(
-            r#"
-            select count(*) as "count!" from posts
-            WHERE published_at IS NOT NULL AND published_at <= NOW()
-            "#
-        )
-        .fetch_one(&self.pool)
-        .await
-        .context("查询已发布文章总数失败")?;
+        let total_count_result = if include_banned {
+            sqlx::query_scalar!(
+                r#"
+                select count(*) from posts
+                WHERE published_at IS NOT NULL AND published_at <= NOW()
+                "#
+            )
+            .fetch_one(&self.pool)
+            .await
+            .context("查询已发布文章总数失败")?
+        } else {
+            sqlx::query_scalar!(
+                r#"
+                select count(*) from posts
+                WHERE published_at IS NOT NULL AND published_at <= NOW() AND (is_banned = false OR is_banned IS NULL)
+                "#
+            )
+            .fetch_one(&self.pool)
+            .await
+            .context("查询已发布文章总数失败")?
+        };
 
-        let total_items: i64 = total_count_result.count;
+        let total_items: i64 = total_count_result.unwrap_or(0);
 
         Ok((posts, total_items))
     }
 
-    async fn get_published_by_id(&self, id: Uuid) -> Result<Option<Post>> {
-        let post = sqlx::query_as!(
-            Post,
-            r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public 
-            from posts 
-            where id = $1 AND published_at IS NOT NULL AND published_at <= NOW()
-            "#,
-            id
-        )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("按 id ({}) 查询已发布 Post 失败", id))?;
+    async fn get_published_by_id(&self, id: Uuid, include_banned: bool) -> Result<Option<Post>> {
+        let post = if include_banned {
+            sqlx::query_as!(
+                Post,
+                r#"
+                select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned 
+                from posts 
+                where id = $1 AND published_at IS NOT NULL AND published_at <= NOW()
+                "#,
+                id
+            )
+                .fetch_optional(&self.pool)
+                .await
+                .context(format!("按 id ({}) 查询已发布 Post 失败", id))?
+        } else {
+            sqlx::query_as!(
+                Post,
+                r#"
+                select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned 
+                from posts 
+                where id = $1 AND published_at IS NOT NULL AND published_at <= NOW() AND (is_banned = false OR is_banned IS NULL)
+                "#,
+                id
+            )
+                .fetch_optional(&self.pool)
+                .await
+                .context(format!("按 id ({}) 查询已发布 Post 失败", id))?
+        };
         Ok(post)
     }
 
-    async fn get_published_by_slug(&self, slug: &str) -> Result<Option<Post>> {
-        let post = sqlx::query_as!(
-            Post,
-            r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public
-            from posts 
-            where slug = $1 AND published_at IS NOT NULL AND published_at <= NOW()
-            "#,
-            slug
-        )
-            .fetch_optional(&self.pool)
-            .await
-            .context(format!("按 slug ({}) 查询已发布 Post 失败", slug))?;
+    async fn get_published_by_slug(
+        &self,
+        slug: &str,
+        include_banned: bool,
+    ) -> Result<Option<Post>> {
+        let post = if include_banned {
+            sqlx::query_as!(
+                Post,
+                r#"
+                select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned
+                from posts 
+                where slug = $1 AND published_at IS NOT NULL AND published_at <= NOW()
+                "#,
+                slug
+            )
+                .fetch_optional(&self.pool)
+                .await
+                .context(format!("按 slug ({}) 查询已发布 Post 失败", slug))?
+        } else {
+            sqlx::query_as!(
+                Post,
+                r#"
+                select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public,is_banned
+                from posts 
+                where slug = $1 AND published_at IS NOT NULL AND published_at <= NOW() AND (is_banned = false OR is_banned IS NULL)
+                "#,
+                slug
+            )
+                .fetch_optional(&self.pool)
+                .await
+                .context(format!("按 slug ({}) 查询已发布 Post 失败", slug))?
+        };
         Ok(post)
     }
 
@@ -489,7 +580,7 @@ impl PostRepository for PostgresPostRepository {
             update posts
             set title = $1,content = $2,slug = $3,updated_at = $4,published_at = $5,draft_shared_with = $6,is_draft_public = $7
             where id = $8
-            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public
+            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public,is_banned
             "#,
             title_to_update,
             content_to_update,
@@ -741,7 +832,7 @@ impl PostRepository for PostgresPostRepository {
             r#"
             SELECT 
                 id, slug, title, content, author_id, created_at, updated_at, published_at,
-                draft_shared_with, is_draft_public
+                draft_shared_with, is_draft_public, is_banned
             FROM posts 
             WHERE published_at IS NULL 
             AND (
@@ -914,7 +1005,7 @@ impl PostRepository for PostgresPostRepository {
             r#"
             SELECT DISTINCT 
                 id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", 
-                published_at, author_id, draft_shared_with, is_draft_public
+                published_at, author_id, draft_shared_with, is_draft_public, is_banned
             FROM posts 
             WHERE 
                 author_id = $1  -- 自己的所有文章
@@ -952,5 +1043,40 @@ impl PostRepository for PostgresPostRepository {
         let total_items: i64 = total_count_result.count;
 
         Ok((posts, total_items))
+    }
+
+    // 封禁文章
+    async fn ban_post(&self, post_id: Uuid) -> Result<()> {
+        sqlx::query!("UPDATE posts SET is_banned = true WHERE id = $1", post_id)
+            .execute(&self.pool)
+            .await
+            .context(format!("封禁文章失败，post_id: {}", post_id))?;
+
+        tracing::info!("文章已被封禁，post_id: {}", post_id);
+        Ok(())
+    }
+
+    // 解封文章
+    async fn unban_post(&self, post_id: Uuid) -> Result<()> {
+        sqlx::query!("UPDATE posts SET is_banned = false WHERE id = $1", post_id)
+            .execute(&self.pool)
+            .await
+            .context(format!("解封文章失败，post_id: {}", post_id))?;
+
+        tracing::info!("文章已被解封，post_id: {}", post_id);
+        Ok(())
+    }
+
+    // 检查文章是否被封禁
+    async fn is_banned(&self, post_id: Uuid) -> Result<bool> {
+        let result = sqlx::query!("SELECT is_banned FROM posts WHERE id = $1", post_id)
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("检查文章封禁状态失败，post_id: {}", post_id))?;
+
+        match result {
+            Some(record) => Ok(record.is_banned),
+            None => anyhow::bail!("文章不存在"),
+        }
     }
 }

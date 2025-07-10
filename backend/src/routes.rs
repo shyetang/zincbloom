@@ -15,9 +15,10 @@ use crate::handlers::category::{
     list_categories_handler, update_category_handler,
 };
 use crate::handlers::post::{
-    create_post_handler, delete_post_handler, get_post_handler, get_published_post_handler,
-    list_posts_handler, list_published_posts_handler, publish_post_handler, share_draft_handler,
-    unpublish_post_handler, update_post_handler,
+    ban_post_handler, create_post_handler, delete_post_handler, get_post_handler,
+    get_published_post_handler, list_posts_handler, list_published_posts_handler,
+    publish_post_handler, share_draft_handler, unban_post_handler, unpublish_post_handler,
+    update_post_handler,
 };
 use crate::handlers::tag::{
     create_tag_handler, delete_tag_handler, get_tag_handler, list_tags_handler, update_tag_handler,
@@ -131,6 +132,9 @@ pub fn create_router(app_state: AppState) -> Router {
         .route("/posts/{id}/unpublish", put(unpublish_post_handler))
         // 草稿分享路由
         .route("/posts/{id}/share", put(share_draft_handler))
+        // 文章封禁和解封路由
+        .route("/posts/{id}/ban", put(ban_post_handler))
+        .route("/posts/{id}/unban", put(unban_post_handler))
         // --- Category 相关的路由 ---
         // GET /categories -> 获取列表,
         // POST /categories -> 创建分类

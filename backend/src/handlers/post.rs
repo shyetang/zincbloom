@@ -1,7 +1,7 @@
 use crate::api_error::ApiError;
 use crate::auth::{AuthUser, OptionalAuth};
 use crate::dtos::Pagination;
-use crate::dtos::post::{CreatePostPayload, ShareDraftPayload, UpdatePostPayload};
+use crate::dtos::post::{BanPostPayload, CreatePostPayload, ShareDraftPayload, UpdatePostPayload};
 use crate::handlers::AppState;
 use anyhow::Result;
 use axum::extract::{Json, Path, Query, State};
@@ -113,7 +113,10 @@ pub async fn get_post_handler(
     let post_detail = match Uuid::parse_str(&id_or_slug) {
         Ok(id) => {
             // 使用带权限控制的方法获取文章详情
-            let post = state.post_service.get_post_by_id_with_permission(id, user_id, can_read_any).await?;
+            let post = state
+                .post_service
+                .get_post_by_id_with_permission(id, user_id, can_read_any)
+                .await?;
 
             // 如果不是管理员，检查文章所有权
             if !can_read_any {
@@ -128,7 +131,10 @@ pub async fn get_post_handler(
         }
         Err(_) => {
             // 使用带权限控制的方法获取文章详情
-            let post = state.post_service.get_post_by_slug_with_permission(&id_or_slug, user_id, can_read_any).await?;
+            let post = state
+                .post_service
+                .get_post_by_slug_with_permission(&id_or_slug, user_id, can_read_any)
+                .await?;
 
             // 如果不是管理员，检查文章所有权
             if !can_read_any {
@@ -313,6 +319,53 @@ pub async fn share_draft_handler(
 
     Ok(Json(serde_json::json!({
         "message": "草稿分享设置已更新",
+        "post_id": id
+    })))
+}
+
+// 封禁文章处理器
+pub async fn ban_post_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(_payload): Json<BanPostPayload>, // 封禁原因等信息
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查封禁权限
+    let can_ban = auth_user.require_permission("post:ban").is_ok();
+    if !can_ban {
+        return Err(ApiError::from(anyhow::anyhow!("您没有权限封禁文章")));
+    }
+
+    // 调用服务层封禁文章
+    state.post_service.ban_post(id, user_id, can_ban).await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "文章已被封禁",
+        "post_id": id
+    })))
+}
+
+// 解封文章处理器
+pub async fn unban_post_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查解封权限
+    let can_ban = auth_user.require_permission("post:ban").is_ok();
+    if !can_ban {
+        return Err(ApiError::from(anyhow::anyhow!("您没有权限解封文章")));
+    }
+
+    // 调用服务层解封文章
+    state.post_service.unban_post(id, user_id, can_ban).await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "文章已被解封",
         "post_id": id
     })))
 }

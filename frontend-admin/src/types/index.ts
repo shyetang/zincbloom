@@ -91,11 +91,16 @@ export interface Post {
   is_draft_public?: boolean
   is_accessing_others_draft?: boolean
 
+  // 封禁状态
+  is_banned?: boolean
+
   // 新增的权限字段
   can_edit: boolean
   can_delete: boolean
   can_publish: boolean
   can_view_detail: boolean
+  can_ban: boolean
+  can_unban: boolean
 }
 
 export interface UserBasic {
@@ -140,6 +145,10 @@ export interface ShareDraftPayload {
   shared_with: string[]
   is_public: boolean
   message: string
+}
+
+export interface BanPostPayload {
+  reason?: string
 }
 
 // 分类相关类型

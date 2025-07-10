@@ -123,6 +123,38 @@ const deletePost = async (post: Post) => {
   }
 }
 
+// 封禁文章
+const banPost = async (post: Post) => {
+  if (!confirm(`确定要封禁文章 "${post.title}" 吗？\n封禁后只有作者和管理员可以查看此文章。`)) {
+    return
+  }
+
+  try {
+    await apiClient.put(`/posts/${post.id}/ban`, { reason: '违规内容' })
+    await fetchPosts()
+    alert('文章已被封禁')
+  } catch (err) {
+    console.error('封禁文章失败:', err)
+    alert('封禁文章失败')
+  }
+}
+
+// 解封文章
+const unbanPost = async (post: Post) => {
+  if (!confirm(`确定要解封文章 "${post.title}" 吗？`)) {
+    return
+  }
+
+  try {
+    await apiClient.put(`/posts/${post.id}/unban`)
+    await fetchPosts()
+    alert('文章已被解封')
+  } catch (err) {
+    console.error('解封文章失败:', err)
+    alert('解封文章失败')
+  }
+}
+
 // 切换发布状态
 const togglePublish = async (post: Post) => {
   try {
@@ -222,10 +254,12 @@ const formatDate = (date: string) => {
 }
 
 const getStatusBadge = (post: Post) => {
+  if (post.is_banned) return 'danger'
   return post.published_at ? 'success' : 'warning'
 }
 
 const getStatusText = (post: Post) => {
+  if (post.is_banned) return '已封禁'
   if (post.published_at) return '已发布'
 
   // 草稿状态的细分显示
@@ -476,6 +510,25 @@ onMounted(() => {
                         :title="post.published_at ? '撤回发布' : '发布文章'"
                       >
                         {{ post.published_at ? '📥' : '📤' }}
+                      </button>
+
+                      <!-- 封禁/解封按钮 -->
+                      <button
+                        v-if="post.can_ban && !post.is_banned"
+                        @click="banPost(post)"
+                        class="btn btn-warning btn-sm"
+                        title="封禁文章"
+                      >
+                        🚫
+                      </button>
+
+                      <button
+                        v-if="post.can_unban && post.is_banned"
+                        @click="unbanPost(post)"
+                        class="btn btn-success btn-sm"
+                        title="解封文章"
+                      >
+                        ✅
                       </button>
 
                       <!-- 删除按钮 -->
@@ -952,5 +1005,17 @@ onMounted(() => {
   font-weight: 600;
   color: #9ca3af; /* 灰色表示不可点击 */
   cursor: not-allowed;
+}
+
+/* 状态徽章样式 */
+.badge-danger {
+  background-color: var(--color-red-100, #fef2f2);
+  color: var(--color-red-800, #991b1b);
+  border: 1px solid var(--color-red-200, #fecaca);
+}
+
+/* 封禁文章的行样式 */
+tr:has(.badge-danger) {
+  background-color: var(--color-red-50, #fef2f2);
 }
 </style>

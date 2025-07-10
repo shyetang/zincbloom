@@ -20,6 +20,10 @@ pub struct Post {
     pub draft_shared_with: Option<Vec<Uuid>>, // 分享给哪些用户（UUID数组）
     #[sqlx(default)]
     pub is_draft_public: Option<bool>, // 是否允许有权限的编辑查看
+    
+    // 文章封禁状态
+    #[sqlx(default)]
+    pub is_banned: Option<bool>, // 是否被管理员封禁
 }
 
 // 草稿访问日志模型
