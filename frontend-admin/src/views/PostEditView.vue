@@ -130,8 +130,39 @@ const publishPost = async () => {
 
 // 保存为草稿
 const saveDraft = async () => {
-  formData.value.published_at = undefined
-  await savePost()
+  if (!formData.value.title.trim()) {
+    alert('请输入文章标题')
+    return
+  }
+
+  if (!formData.value.content.trim()) {
+    alert('请输入文章内容')
+    return
+  }
+
+  try {
+    saving.value = true
+
+    // 构建保存草稿的payload，明确设置unpublish为true
+    const draftPayload = {
+      ...formData.value,
+      published_at: null, // 显式设置为null
+      unpublish: true, // 明确表示要撤回为草稿
+    }
+
+    if (isEdit && postId) {
+      await apiClient.put(`/posts/${postId}`, draftPayload)
+    } else {
+      await apiClient.post('/posts', draftPayload)
+    }
+
+    router.push('/posts')
+  } catch (err) {
+    console.error('保存草稿失败:', err)
+    alert('保存草稿失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 // 打开草稿分享对话框
@@ -139,7 +170,7 @@ const openShareDialog = () => {
   if (!post.value) return
 
   shareForm.value = {
-    shared_with: (post.value.draft_shared_with || []).map(user => user.id),
+    shared_with: (post.value.draft_shared_with || []).map((user) => user.id),
     is_public: post.value.is_draft_public || false,
     message: '',
   }
@@ -187,6 +218,27 @@ const canShareDraft = () => {
   )
 }
 
+// 权限检查的计算属性
+const canEditPost = () => {
+  if (!post.value) return !isEdit // 新建文章时允许编辑
+  return post.value.can_edit || false
+}
+
+const canPublishPost = () => {
+  if (!post.value) return !isEdit // 新建文章时允许发布
+  return post.value.can_publish || false
+}
+
+const canSaveDraft = () => {
+  if (!post.value) return !isEdit // 新建文章时允许保存草稿
+  return post.value.can_edit || false
+}
+
+// 是否为查看模式（没有编辑权限）
+const isViewOnly = () => {
+  return isEdit && post.value && !post.value.can_edit
+}
+
 onMounted(() => {
   fetchMetadata()
   if (isEdit) {
@@ -201,9 +253,19 @@ onMounted(() => {
       <!-- 页面头部 -->
       <div class="page-header">
         <div class="page-title">
-          <h1>{{ isEdit ? '编辑文章' : '写新文章' }}</h1>
+          <h1>
+            {{
+              isEdit
+                ? (isViewOnly() ? '查看文章' : '编辑文章')
+                : '写新文章'
+            }}
+          </h1>
           <p class="page-subtitle">
-            {{ isEdit ? '修改并更新您的文章内容' : '创建一篇新的博客文章' }}
+            {{
+              isEdit
+                ? (isViewOnly() ? '只读模式 - 您只能查看此文章内容' : '修改并更新您的文章内容')
+                : '创建一篇新的博客文章'
+            }}
           </p>
         </div>
         <div class="page-actions">
@@ -234,7 +296,9 @@ onMounted(() => {
                     v-model="formData.title"
                     type="text"
                     class="form-input"
+                    :class="{ 'form-input-readonly': isViewOnly() }"
                     placeholder="输入文章标题..."
+                    :readonly="isViewOnly()"
                     required
                   />
                 </div>
@@ -245,11 +309,15 @@ onMounted(() => {
                   <textarea
                     v-model="formData.content"
                     class="form-textarea content-editor"
+                    :class="{ 'form-textarea-readonly': isViewOnly() }"
                     placeholder="开始写作..."
                     rows="20"
+                    :readonly="isViewOnly()"
                     required
                   ></textarea>
-                  <div class="form-help">支持 Markdown 语法</div>
+                  <div class="form-help">
+                    {{ isViewOnly() ? '只读模式' : '支持 Markdown 语法' }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -263,8 +331,25 @@ onMounted(() => {
                 <h3>发布选项</h3>
               </div>
               <div class="card-body">
-                <div class="publish-actions">
-                  <button @click="saveDraft" class="btn btn-secondary w-full" :disabled="saving">
+                <!-- 只读模式提示 -->
+                <div v-if="isViewOnly()" class="readonly-notice">
+                  <div class="alert alert-info">
+                    <p><strong>只读模式</strong></p>
+                    <p>您只能查看此文章内容，无法进行编辑、保存或发布操作。</p>
+                    <p v-if="post?.is_accessing_others_draft" class="text-sm">
+                      这是他人分享给您的草稿。
+                    </p>
+                  </div>
+                </div>
+
+                <!-- 编辑模式的操作按钮 -->
+                <div v-else class="publish-actions">
+                  <button
+                    v-if="canSaveDraft()"
+                    @click="saveDraft"
+                    class="btn btn-secondary w-full"
+                    :disabled="saving"
+                  >
                     {{ saving ? '保存中...' : '保存草稿' }}
                   </button>
 
@@ -277,7 +362,12 @@ onMounted(() => {
                     🔗 分享草稿
                   </button>
 
-                  <button @click="publishPost" class="btn btn-primary w-full" :disabled="saving">
+                  <button
+                    v-if="canPublishPost()"
+                    @click="publishPost"
+                    class="btn btn-primary w-full"
+                    :disabled="saving"
+                  >
                     {{
                       saving ? '发布中...' : isEdit && post?.published_at ? '更新发布' : '立即发布'
                     }}
@@ -336,13 +426,24 @@ onMounted(() => {
               </div>
               <div class="card-body">
                 <div class="checkbox-group">
-                  <label v-for="category in categories" :key="category.id" class="checkbox-item">
-                    <input v-model="formData.category_ids" type="checkbox" :value="category.id" />
+                  <label
+                    v-for="category in categories"
+                    :key="category.id"
+                    class="checkbox-item"
+                    :class="{ 'checkbox-readonly': isViewOnly() }"
+                  >
+                    <input
+                      v-model="formData.category_ids"
+                      type="checkbox"
+                      :value="category.id"
+                      :disabled="isViewOnly()"
+                    />
                     <span>{{ category.name }}</span>
                   </label>
                 </div>
                 <div v-if="categories.length === 0" class="empty-notice">
-                  暂无分类，<router-link to="/categories">去创建分类</router-link>
+                  暂无分类，<router-link v-if="!isViewOnly()" to="/categories">去创建分类</router-link>
+                  <span v-else>暂无分类</span>
                 </div>
               </div>
             </div>
@@ -354,13 +455,24 @@ onMounted(() => {
               </div>
               <div class="card-body">
                 <div class="checkbox-group">
-                  <label v-for="tag in tags" :key="tag.id" class="checkbox-item">
-                    <input v-model="formData.tag_ids" type="checkbox" :value="tag.id" />
+                  <label
+                    v-for="tag in tags"
+                    :key="tag.id"
+                    class="checkbox-item"
+                    :class="{ 'checkbox-readonly': isViewOnly() }"
+                  >
+                    <input
+                      v-model="formData.tag_ids"
+                      type="checkbox"
+                      :value="tag.id"
+                      :disabled="isViewOnly()"
+                    />
                     <span>{{ tag.name }}</span>
                   </label>
                 </div>
                 <div v-if="tags.length === 0" class="empty-notice">
-                  暂无标签，<router-link to="/tags">去创建标签</router-link>
+                  暂无标签，<router-link v-if="!isViewOnly()" to="/tags">去创建标签</router-link>
+                  <span v-else>暂无标签</span>
                 </div>
               </div>
             </div>
@@ -765,5 +877,56 @@ onMounted(() => {
 .btn-info:hover {
   background-color: var(--color-blue-600, #2563eb);
   border-color: var(--color-blue-600, #2563eb);
+}
+
+/* 只读模式样式 */
+.form-input-readonly,
+.form-textarea-readonly {
+  background-color: #f8f9fa !important;
+  border-color: #e9ecef !important;
+  color: #6c757d !important;
+  cursor: default !important;
+}
+
+.form-input-readonly:focus,
+.form-textarea-readonly:focus {
+  box-shadow: none !important;
+  border-color: #e9ecef !important;
+}
+
+.checkbox-readonly {
+  opacity: 0.7;
+}
+
+.checkbox-readonly input:disabled {
+  cursor: default;
+}
+
+.readonly-notice {
+  margin-bottom: 1rem;
+}
+
+.alert {
+  padding: 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid;
+}
+
+.alert-info {
+  background-color: #e1f5fe;
+  border-color: #81d4fa;
+  color: #01579b;
+}
+
+.alert p {
+  margin: 0 0 0.5rem 0;
+}
+
+.alert p:last-child {
+  margin-bottom: 0;
+}
+
+.text-sm {
+  font-size: 0.875rem;
 }
 </style>

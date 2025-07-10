@@ -99,6 +99,12 @@ pub struct PostDetailDto {
     pub is_draft_public: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_accessing_others_draft: Option<bool>, // 标识是否在访问他人的草稿
+
+    // 当前用户对此文章的操作权限
+    pub can_edit: bool,    // 是否可以编辑
+    pub can_delete: bool,  // 是否可以删除
+    pub can_publish: bool, // 是否可以发布/撤回
+    pub can_view_detail: bool, // 是否可以查看详情
 }
 
 /// 分类的简化 DTO,不想在 PostDetailDto 中暴露完整的 Category 模型

@@ -1,5 +1,6 @@
 use crate::dtos::post::{
-    CategoryDto, CreatePostPayload, PostDetailDto, TagDto, UpdatePostPayload, UserBasicDto,
+    CategoryDto, CreatePostPayload, PostDetailDto, ShareDraftPayload, TagDto, UpdatePostPayload,
+    UserBasicDto,
 };
 use crate::dtos::{PaginatedResponse, Pagination};
 use crate::models::Post;
@@ -59,6 +60,7 @@ impl PostService {
         rendered_html: String,
         accessing_user_id: Option<Uuid>,
         author: Option<UserBasicDto>,
+        can_read_any: bool, // 是否有管理员权限
     ) -> PostDetailDto {
         // 判断是否在访问他人的草稿
         let is_accessing_others_draft = if post.published_at.is_some() {
@@ -70,6 +72,63 @@ impl PostService {
         } else {
             // 未提供用户ID，无法判断
             None
+        };
+
+        // 权限判断逻辑
+        let is_own_post =
+            accessing_user_id.map_or(false, |user_id| Some(user_id) == post.author_id);
+        let is_published = post.published_at.is_some();
+
+        // 检查是否有草稿访问权限（分享或公开）
+        let can_access_draft = if let Some(user_id) = accessing_user_id {
+            // 检查是否被分享给当前用户
+            let is_shared_to_user = post
+                .draft_shared_with
+                .as_ref()
+                .map_or(false, |shared| shared.contains(&user_id));
+            // 检查是否为公开草稿
+            let is_public_draft = post.is_draft_public.unwrap_or(false);
+
+            is_shared_to_user || is_public_draft
+        } else {
+            false
+        };
+
+        // 设置操作权限
+        let can_view_detail = if is_own_post {
+            true // 自己的文章总是可以查看详情
+        } else if is_published {
+            true // 已发布文章所有人都可以查看详情
+        } else if can_access_draft {
+            true // 有草稿访问权限（分享或公开草稿）
+        } else if can_read_any {
+            false // 管理员可以看到私有草稿在列表中，但不能查看详情
+        } else {
+            false // 其他情况不允许查看详情
+        };
+
+        let can_edit = if is_own_post {
+            true // 可以编辑自己的文章
+        } else if is_published && can_read_any {
+            true // 管理员可以编辑他人的已发布文章
+        } else {
+            false // 其他情况不允许编辑（包括分享的草稿）
+        };
+
+        let can_delete = if is_own_post {
+            true // 可以删除自己的文章
+        } else if is_published && can_read_any {
+            true // 管理员可以删除他人的已发布文章
+        } else {
+            false // 其他情况不允许删除（包括分享的草稿）
+        };
+
+        let can_publish = if is_own_post {
+            true // 可以发布/撤回自己的文章
+        } else if is_published && can_read_any {
+            true // 管理员可以发布/撤回他人的已发布文章
+        } else {
+            false // 其他情况不允许发布操作（包括分享的草稿）
         };
 
         PostDetailDto {
@@ -101,6 +160,11 @@ impl PostService {
                 None
             },
             is_accessing_others_draft,
+            // 新增的权限字段
+            can_edit,
+            can_delete,
+            can_publish,
+            can_view_detail,
         }
     }
 
@@ -189,6 +253,7 @@ impl PostService {
             rendered_html,
             Some(author_id), // 创建者查看自己的文章
             author,
+            false, // 创建者查看自己的文章，不需要管理员权限
         );
         Ok(post_detail_dto)
     }
@@ -227,6 +292,51 @@ impl PostService {
             rendered_html,
             None, // 这里需要调用方传入用户ID来确定是否访问他人草稿
             author,
+            false, // 单个文章查看，默认非管理员权限
+        );
+        Ok(post_detail_dto)
+    }
+
+    // 获取单个帖子详情（带权限控制），返回 PostDetailDto
+    pub async fn get_post_by_id_with_permission(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        can_read_any: bool,
+    ) -> Result<PostDetailDto> {
+        let post = self
+            .repo
+            .get_by_id(id)
+            .await
+            .context(format!("Service未能通过id: ({})获取帖子基本信息", id))?
+            .ok_or_else(|| anyhow!("未找到 ID 为 {} 的帖子", id))?;
+
+        // --- Markdown 转换 ---
+        // 从 post.content(原始Markdown)渲染出 HTML
+        let rendered_html = markdown_to_html_safe(&post.content);
+
+        let categories = self
+            .repo
+            .get_categories_for_post(post.id)
+            .await
+            .context(format!("获取新创建帖子 {} 的分类失败", post.id))?;
+        let tags = self
+            .repo
+            .get_tags_for_post(post.id)
+            .await
+            .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
+
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            Some(user_id), // 传入用户ID用于权限判断
+            author,
+            can_read_any, // 传入用户的管理员权限
         );
         Ok(post_detail_dto)
     }
@@ -258,8 +368,59 @@ impl PostService {
         // 获取作者信息
         let author = self.get_author_info(post.author_id).await?;
 
-        let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            None,
+            author,
+            false,
+        );
+        Ok(post_detail_dto)
+    }
+
+    // 获取单个帖子详情（通过slug，带权限控制），返回 PostDetailDto
+    pub async fn get_post_by_slug_with_permission(
+        &self,
+        slug: &str,
+        user_id: Uuid,
+        can_read_any: bool,
+    ) -> Result<PostDetailDto> {
+        let post = self
+            .repo
+            .get_by_slug(slug)
+            .await
+            .context(format!("Service未能通过 slug ({}) 获取帖子基本信息", slug))?
+            .ok_or_else(|| anyhow!("未找到 slug 为 '{}' 的帖子", slug))?;
+
+        // --- Markdown 转换 ---
+        // 从 post.content(原始Markdown)渲染出 HTML
+        let rendered_html = markdown_to_html_safe(&post.content);
+
+        let categories = self
+            .repo
+            .get_categories_for_post(post.id)
+            .await
+            .context(format!("获取新创建帖子 {} 的分类失败", post.id))?;
+        let tags = self
+            .repo
+            .get_tags_for_post(post.id)
+            .await
+            .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
+
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            Some(user_id), // 传入用户ID用于权限判断
+            author,
+            can_read_any, // 传入用户的管理员权限
+        );
         Ok(post_detail_dto)
     }
 
@@ -302,8 +463,15 @@ impl PostService {
             // 获取作者信息
             let author = self.get_author_info(post.author_id).await?;
 
-            let post_detail_dto =
-                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
+            let post_detail_dto = Self::create_post_detail_dto(
+                &post,
+                categories,
+                tags,
+                rendered_html,
+                None,
+                author,
+                false,
+            ); // list_posts方法，默认非管理员权限
             post_details_list.push(post_detail_dto);
         }
 
@@ -313,7 +481,7 @@ impl PostService {
     }
 
     // 新增：根据权限获取文章列表
-    // 管理员可以看到所有文章，普通用户只能看到自己的文章
+    // 管理员可以看到所有文章，普通用户只能看到有权访问的文章
     pub async fn list_posts_with_permission(
         &self,
         pagination: Pagination,
@@ -328,17 +496,17 @@ impl PostService {
 
         // 根据权限决定查询范围
         let (posts, total_items) = if can_read_any {
-            // 管理员权限：查看所有文章
+            // 管理员权限：查看所有文章（包括私有草稿）
             self.repo
                 .list(limit, offset)
                 .await
                 .context("Service 未能获取分页的帖子列表(管理员视图)")?
         } else {
-            // 普通用户权限：只查看自己的文章
+            // 普通用户权限：只能看到有权访问的文章
             self.repo
-                .list_by_author(user_id, limit, offset)
+                .list_posts_with_access_control(user_id, can_read_any, limit, offset)
                 .await
-                .context("Service 未能获取用户自己的帖子列表")?
+                .context("获取用户可访问的文章列表失败")?
         };
 
         // 2. 为每个帖子获取其关联的分类和标签 (N+1 查询问题警告)
@@ -368,6 +536,7 @@ impl PostService {
                 rendered_html,
                 Some(user_id),
                 author,
+                can_read_any, // 传递用户的权限信息
             );
             post_details_list.push(post_detail_dto);
         }
@@ -416,8 +585,15 @@ impl PostService {
             // 获取作者信息
             let author = self.get_author_info(post.author_id).await?;
 
-            let post_detail_dto =
-                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None,author);
+            let post_detail_dto = Self::create_post_detail_dto(
+                &post,
+                categories,
+                tags,
+                rendered_html,
+                None,
+                author,
+                false,
+            ); // 获取已发布文章，公开接口不需要管理员权限
             post_details_list.push(post_detail_dto);
         }
 
@@ -451,8 +627,15 @@ impl PostService {
         // 获取作者信息
         let author = self.get_author_info(post.author_id).await?;
 
-        let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            None,
+            author,
+            false,
+        );
         Ok(post_detail_dto)
     }
 
@@ -485,8 +668,15 @@ impl PostService {
         // 获取作者信息
         let author = self.get_author_info(post.author_id).await?;
 
-        let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            None,
+            author,
+            false,
+        );
         Ok(post_detail_dto)
     }
 
@@ -542,8 +732,15 @@ impl PostService {
         // 获取作者信息
         let author = self.get_author_info(post.author_id).await?;
 
-        let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            None,
+            author,
+            false,
+        ); // update_post方法，权限在上层检查
         Ok(post_detail_dto)
     }
 
@@ -576,5 +773,112 @@ impl PostService {
             .unpublish(id)
             .await
             .context(format!("Service层撤回文章 (id: {}) 失败", id))
+    }
+
+    // 草稿分享功能
+    pub async fn share_draft(
+        &self,
+        post_id: Uuid,
+        user_id: Uuid,
+        payload: ShareDraftPayload,
+    ) -> Result<()> {
+        // 1. 验证文章是否存在且为草稿
+        let post = self
+            .repo
+            .get_by_id(post_id)
+            .await
+            .context("获取文章信息失败")?
+            .ok_or_else(|| anyhow!("文章不存在"))?;
+
+        // 2. 检查是否为草稿
+        if post.published_at.is_some() {
+            return Err(anyhow!("只能分享草稿文章"));
+        }
+
+        // 3. 检查权限：只有文章作者可以分享
+        if post.author_id != Some(user_id) {
+            return Err(anyhow!("您只能分享自己的草稿"));
+        }
+
+        // 4. 验证要分享给的用户是否存在
+        for &shared_user_id in &payload.shared_with {
+            if self.user_repo.find_by_id(shared_user_id).await?.is_none() {
+                return Err(anyhow!("要分享的用户 {} 不存在", shared_user_id));
+            }
+        }
+
+        // 5. 调用仓库层执行分享
+        self.repo
+            .share_draft(post_id, &payload)
+            .await
+            .context("分享草稿失败")?;
+
+        tracing::info!(
+            "用户 {} 成功分享草稿 {} 给 {} 个用户，公开设置: {}",
+            user_id,
+            post_id,
+            payload.shared_with.len(),
+            payload.is_public
+        );
+
+        Ok(())
+    }
+
+    // 检查用户是否可以访问草稿
+    pub async fn can_access_draft(&self, post_id: Uuid, user_id: Uuid) -> Result<bool> {
+        self.repo
+            .can_access_draft(post_id, user_id)
+            .await
+            .context("检查草稿访问权限失败")
+    }
+
+    // 获取用户可访问的草稿列表
+    pub async fn list_accessible_drafts(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> Result<PaginatedResponse<PostDetailDto>> {
+        let limit = pagination.limit();
+        let offset = pagination.offset();
+        let page = pagination.page();
+        let page_size = pagination.page_size();
+
+        let (posts, total_items) = self
+            .repo
+            .list_accessible_drafts(user_id, limit, offset)
+            .await
+            .context("获取用户可访问的草稿列表失败")?;
+
+        let mut post_details_list = Vec::with_capacity(posts.len());
+
+        for post in posts {
+            let categories = self
+                .repo
+                .get_categories_for_post(post.id)
+                .await
+                .context(format!("获取草稿 {} 的分类失败", post.id))?;
+            let tags = self
+                .repo
+                .get_tags_for_post(post.id)
+                .await
+                .context(format!("获取草稿 {} 的标签失败", post.id))?;
+
+            let rendered_html = markdown_to_html_safe(&post.content);
+            let author = self.get_author_info(post.author_id).await?;
+
+            let post_detail_dto = Self::create_post_detail_dto(
+                &post,
+                categories,
+                tags,
+                rendered_html,
+                Some(user_id),
+                author,
+                false, // list_accessible_drafts，已经通过权限过滤，不需要管理员权限
+            );
+            post_details_list.push(post_detail_dto);
+        }
+
+        let response = PaginatedResponse::new(post_details_list, total_items, page, page_size);
+        Ok(response)
     }
 }

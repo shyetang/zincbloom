@@ -90,6 +90,12 @@ export interface Post {
   draft_shared_with?: UserBasic[]
   is_draft_public?: boolean
   is_accessing_others_draft?: boolean
+
+  // 新增的权限字段
+  can_edit: boolean
+  can_delete: boolean
+  can_publish: boolean
+  can_view_detail: boolean
 }
 
 export interface UserBasic {
@@ -104,7 +110,9 @@ export interface PostCreate {
   summary?: string
   category_ids?: string[]
   tag_ids?: string[]
-  published_at?: string
+  published_at?: string | null
+  draft_shared_with?: string[]
+  is_draft_public?: boolean
 }
 
 export interface PostUpdate {
@@ -113,6 +121,10 @@ export interface PostUpdate {
   summary?: string
   category_ids?: string[]
   tag_ids?: string[]
+  published_at?: string | null
+  unpublish?: boolean
+  draft_shared_with?: string[]
+  is_draft_public?: boolean
 }
 
 export interface PostFilters {

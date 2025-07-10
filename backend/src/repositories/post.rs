@@ -98,6 +98,15 @@ pub trait PostRepository: Send + Sync {
 
     // 检查文章是否为草稿
     async fn is_draft(&self, post_id: Uuid) -> Result<bool>;
+
+    // 根据用户权限获取可访问的文章列表（用于管理界面）
+    async fn list_posts_with_access_control(
+        &self,
+        user_id: Uuid,
+        can_read_any: bool,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)>;
 }
 
 // Postgres的具体实现
@@ -880,5 +889,68 @@ impl PostRepository for PostgresPostRepository {
             Some(record) => Ok(record.published_at.is_none()),
             None => anyhow::bail!("文章不存在"),
         }
+    }
+
+    // 根据用户权限获取可访问的文章列表（用于管理界面）
+    async fn list_posts_with_access_control(
+        &self,
+        user_id: Uuid,
+        can_read_any: bool,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)> {
+        if can_read_any {
+            // 如果用户有权限读取所有文章，则不进行权限过滤
+            return self.list(limit, offset).await;
+        }
+
+        // 普通用户权限过滤：
+        // 1. 自己的所有文章（已发布+草稿）
+        // 2. 他人的已发布文章
+        // 3. 他人分享给自己的草稿
+        // 4. 设为公开的草稿
+        let posts = sqlx::query_as!(
+            Post,
+            r#"
+            SELECT DISTINCT 
+                id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", 
+                published_at, author_id, draft_shared_with, is_draft_public
+            FROM posts 
+            WHERE 
+                author_id = $1  -- 自己的所有文章
+                OR published_at IS NOT NULL  -- 他人的已发布文章
+                OR (published_at IS NULL AND $1 = ANY(draft_shared_with))  -- 分享给自己的草稿
+                OR (published_at IS NULL AND is_draft_public = true)  -- 公开的草稿
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+            user_id,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("查询用户可访问的文章列表失败")?;
+
+        // 统计总数（使用相同的过滤条件）
+        let total_count_result = sqlx::query!(
+            r#"
+            SELECT COUNT(DISTINCT id) as "count!"
+            FROM posts 
+            WHERE 
+                author_id = $1  -- 自己的所有文章
+                OR published_at IS NOT NULL  -- 他人的已发布文章
+                OR (published_at IS NULL AND $1 = ANY(draft_shared_with))  -- 分享给自己的草稿
+                OR (published_at IS NULL AND is_draft_public = true)  -- 公开的草稿
+            "#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("查询用户可访问的文章总数失败")?;
+
+        let total_items: i64 = total_count_result.count;
+
+        Ok((posts, total_items))
     }
 }

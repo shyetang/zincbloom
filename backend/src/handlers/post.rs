@@ -1,7 +1,7 @@
 use crate::api_error::ApiError;
 use crate::auth::{AuthUser, OptionalAuth};
 use crate::dtos::Pagination;
-use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
+use crate::dtos::post::{CreatePostPayload, ShareDraftPayload, UpdatePostPayload};
 use crate::handlers::AppState;
 use anyhow::Result;
 use axum::extract::{Json, Path, Query, State};
@@ -112,7 +112,8 @@ pub async fn get_post_handler(
     // 尝试解析为UUID
     let post_detail = match Uuid::parse_str(&id_or_slug) {
         Ok(id) => {
-            let post = state.post_service.get_post_by_id(id).await?;
+            // 使用带权限控制的方法获取文章详情
+            let post = state.post_service.get_post_by_id_with_permission(id, user_id, can_read_any).await?;
 
             // 如果不是管理员，检查文章所有权
             if !can_read_any {
@@ -126,7 +127,8 @@ pub async fn get_post_handler(
             post
         }
         Err(_) => {
-            let post = state.post_service.get_post_by_slug(&id_or_slug).await?;
+            // 使用带权限控制的方法获取文章详情
+            let post = state.post_service.get_post_by_slug_with_permission(&id_or_slug, user_id, can_read_any).await?;
 
             // 如果不是管理员，检查文章所有权
             if !can_read_any {
@@ -292,4 +294,25 @@ pub async fn unpublish_post_handler(
     // 执行撤回操作
     state.post_service.unpublish_post(id).await?;
     Ok(Json(serde_json::json!({"message": "文章撤回成功"})))
+}
+
+// 草稿分享处理器
+pub async fn share_draft_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ShareDraftPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查草稿分享权限
+    auth_user.require_permission("post:draft:share")?;
+
+    // 调用服务层分享草稿
+    state.post_service.share_draft(id, user_id, payload).await?;
+
+    Ok(Json(serde_json::json!({
+        "message": "草稿分享设置已更新",
+        "post_id": id
+    })))
 }

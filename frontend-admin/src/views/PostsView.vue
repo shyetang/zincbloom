@@ -27,10 +27,7 @@ const shareForm = ref<ShareDraftPayload>({
   message: '',
 })
 
-// 管理员紧急访问相关状态
-const emergencyAccessDialogVisible = ref(false)
-const emergencyAccessPost = ref<Post | null>(null)
-const emergencyAccessReason = ref('')
+// 移除了管理员紧急访问功能，保护用户隐私
 
 // 搜索和筛选
 const filters = ref<PostFilters>({
@@ -195,6 +192,12 @@ const resetFilters = () => {
 
 // 计算属性
 const filteredPosts = computed(() => {
+  // 管理员可以看到所有文章列表（包括他人私人草稿），但不能查看详情
+  if (authStore.hasAnyPermission(['post:read_any', 'post:manage_any'])) {
+    return posts.value
+  }
+
+  // 普通用户只能看到有权访问的文章
   return posts.value.filter((post) => {
     // 对于已发布的文章，所有人都可以看到
     if (post.published_at) return true
@@ -250,28 +253,13 @@ const getDraftShareInfo = (post: Post) => {
   return parts.join(' • ')
 }
 
-// 检查是否可以对文章执行操作
+// 简化的权限检查函数 - 直接使用后端返回的权限字段
 const canEditPost = (post: Post) => {
-  if (post.published_at) {
-    // 已发布文章的编辑权限
-    return (
-      authStore.hasPermission('post:edit_any') ||
-      (authStore.hasPermission('post:edit_own') && post.author_id === authStore.user?.id)
-    )
-  }
-  // 草稿编辑权限
-  return authStore.canEditDraft(post)
+  return post.can_edit
 }
 
 const canDeletePost = (post: Post) => {
-  if (post.published_at) {
-    return (
-      authStore.hasPermission('post:delete_any') ||
-      (authStore.hasPermission('post:delete_own') && post.author_id === authStore.user?.id)
-    )
-  }
-  // 草稿删除权限 - 只允许作者删除自己的草稿
-  return authStore.canDeleteOwnDrafts() && post.author_id === authStore.user?.id
+  return post.can_delete
 }
 
 const canSharePost = (post: Post) => {
@@ -279,67 +267,18 @@ const canSharePost = (post: Post) => {
     !post.published_at && // 只有草稿可以分享
     authStore.canShareDrafts() &&
     post.author_id === authStore.user?.id
-  ) // 只能分享自己的草稿
+  ) // 分享权限仍然需要前端检查，因为这是业务逻辑
 }
 
 const canPublishPost = (post: Post) => {
-  if (post.published_at) {
-    return (
-      authStore.hasPermission('post:unpublish_any') ||
-      (authStore.hasPermission('post:unpublish_own') && post.author_id === authStore.user?.id)
-    )
-  }
-  return (
-    authStore.hasPermission('post:publish_any') ||
-    (authStore.hasPermission('post:publish_own') && post.author_id === authStore.user?.id)
-  )
+  return post.can_publish
 }
 
-// 管理员紧急访问相关方法
-const canEmergencyAccess = (post: Post) => {
-  // 只有草稿且不是自己的文章，且有紧急访问权限
-  return (
-    !post.published_at &&
-    post.author_id !== authStore.user?.id &&
-    authStore.canEmergencyAccessDrafts()
-  )
+const canViewPostDetail = (post: Post) => {
+  return post.can_view_detail
 }
 
-const openEmergencyAccessDialog = (post: Post) => {
-  emergencyAccessPost.value = post
-  emergencyAccessReason.value = ''
-  emergencyAccessDialogVisible.value = true
-}
-
-const closeEmergencyAccessDialog = () => {
-  emergencyAccessDialogVisible.value = false
-  emergencyAccessPost.value = null
-  emergencyAccessReason.value = ''
-}
-
-const confirmEmergencyAccess = async () => {
-  if (!emergencyAccessPost.value || !emergencyAccessReason.value.trim()) {
-    alert('请输入访问理由')
-    return
-  }
-
-  try {
-    // 记录审计日志并获取访问权限
-    await apiClient.post(`/posts/${emergencyAccessPost.value.id}/emergency-access`, {
-      reason: emergencyAccessReason.value,
-    })
-
-    closeEmergencyAccessDialog()
-
-    // 刷新文章列表，现在应该可以看到这个草稿了
-    await fetchPosts()
-
-    alert('紧急访问已获得，此操作已记录审计日志')
-  } catch (err) {
-    console.error('紧急访问失败:', err)
-    alert('紧急访问失败')
-  }
-}
+// 移除了紧急访问功能，用户可以通过分享草稿的方式让管理员查看
 
 onMounted(() => {
   fetchPosts()
@@ -453,9 +392,24 @@ onMounted(() => {
                 <tr v-for="post in filteredPosts" :key="post.id">
                   <td>
                     <div class="post-title-cell">
-                      <router-link :to="`/posts/${post.id}/edit`" class="post-title-link">
+                      <router-link
+                        v-if="canViewPostDetail(post)"
+                        :to="`/posts/${post.id}/edit`"
+                        class="post-title-link"
+                      >
                         {{ post.title }}
                       </router-link>
+                      <span
+                        v-else
+                        class="post-title-text"
+                        :title="
+                          post.is_accessing_others_draft
+                            ? '管理员无法查看他人私有草稿详情'
+                            : '无查看权限'
+                        "
+                      >
+                        {{ post.title }}
+                      </span>
                       <div class="post-slug">{{ post.slug }}</div>
                     </div>
                   </td>
@@ -553,26 +507,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 管理员紧急访问说明 -->
-      <div v-if="authStore.canEmergencyAccessDrafts()" class="card mt-6">
-        <div class="card-body">
-          <div class="emergency-access-info">
-            <h3>🚨 管理员紧急访问说明</h3>
-            <p class="text-gray-600">
-              根据草稿隐私保护原则，管理员无法查看他人草稿列表。
-              如需紧急访问特定草稿，请通过以下方式：
-            </p>
-            <ul class="emergency-access-methods">
-              <li>📝 用户举报违规内容时，获得具体文章ID</li>
-              <li>🔍 系统安全监控发现问题时，定位到具体文章</li>
-              <li>📞 通过其他官方渠道获得需要审查的文章信息</li>
-            </ul>
-            <p class="text-sm text-gray-500 mt-4">
-              所有紧急访问操作都会记录审计日志，并通知文章作者。
-            </p>
-          </div>
-        </div>
-      </div>
+      <!-- 提示：移除了紧急访问功能，保护用户隐私 -->
     </div>
 
     <!-- 草稿分享对话框 -->
@@ -635,65 +570,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 管理员紧急访问对话框 -->
-    <div
-      v-if="emergencyAccessDialogVisible"
-      class="modal-overlay"
-      @click="closeEmergencyAccessDialog"
-    >
-      <div class="modal-dialog emergency-dialog" @click.stop>
-        <div class="modal-header">
-          <h3>🚨 紧急访问草稿</h3>
-          <button @click="closeEmergencyAccessDialog" class="modal-close">&times;</button>
-        </div>
-
-        <div class="modal-body">
-          <div v-if="emergencyAccessPost" class="emergency-post-info">
-            <h4>{{ emergencyAccessPost.title }}</h4>
-            <p class="text-gray-600">
-              ⚠️ 警告：您即将访问他人的私人草稿。此操作违反了用户隐私，
-              只能在紧急情况下使用，并且会被记录到审计日志中。
-            </p>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label required">访问理由 *</label>
-            <textarea
-              v-model="emergencyAccessReason"
-              class="form-textarea"
-              placeholder="请详细说明为什么需要紧急访问此草稿（例如：用户举报内容违规、系统安全检查等）"
-              rows="4"
-              required
-            ></textarea>
-            <p class="form-help">此理由将被记录到审计日志中，并可能被用户查看。</p>
-          </div>
-
-          <div class="emergency-warning">
-            <div class="warning-icon">⚠️</div>
-            <div class="warning-content">
-              <h5>重要提醒</h5>
-              <ul>
-                <li>此操作将被记录到系统审计日志</li>
-                <li>草稿作者将收到访问通知</li>
-                <li>请确保您有合法的访问理由</li>
-                <li>滥用此功能可能导致账户被限制</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button @click="closeEmergencyAccessDialog" class="btn btn-secondary">取消</button>
-          <button
-            @click="confirmEmergencyAccess"
-            class="btn btn-danger"
-            :disabled="!emergencyAccessReason.trim()"
-          >
-            确认紧急访问
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 移除了紧急访问对话框，保护用户隐私 -->
   </AdminLayout>
 </template>
 
@@ -1048,90 +925,7 @@ onMounted(() => {
   border-color: var(--color-blue-600, #2563eb);
 }
 
-/* 管理员紧急访问说明样式 */
-.emergency-access-info {
-  padding: var(--space-4);
-  background: #fef3cd;
-  border: 1px solid #facc15;
-  border-radius: var(--border-radius-md);
-}
-
-.emergency-access-info h3 {
-  margin: 0 0 var(--space-4);
-  color: #d97706;
-  font-size: var(--text-lg);
-}
-
-.emergency-access-methods {
-  list-style: none;
-  padding-left: 0;
-  margin: var(--space-4) 0;
-}
-
-.emergency-access-methods li {
-  padding: var(--space-3);
-  margin-bottom: var(--space-2);
-  background-color: #fef3c7;
-  border-left: 3px solid #f59e0b;
-  border-radius: 0 4px 4px 0;
-  font-size: var(--text-sm);
-}
-
-/* 紧急访问对话框样式 */
-.emergency-dialog {
-  max-width: 600px;
-}
-
-.emergency-post-info {
-  margin-bottom: var(--space-6);
-  padding: var(--space-4);
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: var(--border-radius-md);
-}
-
-.emergency-post-info h4 {
-  margin: 0 0 var(--space-2);
-  font-size: var(--text-lg);
-  color: #dc2626;
-}
-
-.emergency-warning {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: #fefce8;
-  border: 1px solid #facc15;
-  border-radius: var(--border-radius-md);
-  margin-top: var(--space-4);
-}
-
-.warning-icon {
-  font-size: var(--text-xl);
-  color: #d97706;
-}
-
-.warning-content h5 {
-  margin: 0 0 var(--space-2);
-  color: #d97706;
-  font-size: var(--text-base);
-}
-
-.warning-content ul {
-  margin: 0;
-  padding-left: var(--space-4);
-}
-
-.warning-content li {
-  color: #92400e;
-  font-size: var(--text-sm);
-  margin-bottom: var(--space-1);
-}
-
-.form-label.required::after {
-  content: ' *';
-  color: #dc2626;
-}
+/* 移除了紧急访问相关样式，简化界面设计 */
 
 /* warning按钮样式 */
 .btn-warning {
@@ -1150,6 +944,13 @@ onMounted(() => {
   background-color: var(--color-gray-300);
   color: var(--color-gray-500);
   border-color: var(--color-gray-300);
+  cursor: not-allowed;
+}
+
+/* 不可点击的标题样式 */
+.post-title-text {
+  font-weight: 600;
+  color: #9ca3af; /* 灰色表示不可点击 */
   cursor: not-allowed;
 }
 </style>

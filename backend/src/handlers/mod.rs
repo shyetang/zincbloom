@@ -7,7 +7,7 @@ pub mod user;
 
 pub use post::{
     create_post_handler, delete_post_handler, get_post_handler, get_published_post_handler,
-    list_posts_handler, list_published_posts_handler, update_post_handler,
+    list_posts_handler, list_published_posts_handler, share_draft_handler, update_post_handler,
 };
 
 pub use category::{
