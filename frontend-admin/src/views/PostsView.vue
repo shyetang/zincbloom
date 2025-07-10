@@ -142,7 +142,7 @@ const togglePublish = async (post: Post) => {
 const openShareDialog = (post: Post) => {
   selectedPost.value = post
   shareForm.value = {
-    shared_with: post.draft_shared_with || [],
+    shared_with: (post.draft_shared_with || []).map(user => user.id),
     is_public: post.is_draft_public || false,
     message: '',
   }

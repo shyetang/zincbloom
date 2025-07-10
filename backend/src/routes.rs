@@ -27,8 +27,20 @@ use crate::handlers::user::{
     get_my_stats_handler, update_my_profile_handler,
 };
 use crate::handlers::{
-    AppState, batch_delete_tags_handler, find_similar_tags_handler, get_merge_preview_handler,
-    get_tag_usage_stats_handler, list_user_permissions_handler, merge_tags_enhanced_handler,
+    AppState,
+    // 新增的分类合并相关处理器
+    batch_delete_categories_handler,
+    batch_delete_tags_handler,
+    find_similar_categories_handler,
+    find_similar_tags_handler,
+    get_category_merge_preview_handler,
+    get_category_usage_stats_handler,
+    get_merge_preview_handler,
+    get_tag_usage_stats_handler,
+    list_user_permissions_handler,
+    merge_categories_enhanced_handler,
+    merge_categories_handler,
+    merge_tags_enhanced_handler,
     merge_tags_handler,
 };
 use axum::Router;
@@ -132,6 +144,28 @@ pub fn create_router(app_state: AppState) -> Router {
             get(get_category_handler)
                 .put(update_category_handler)
                 .delete(delete_category_handler),
+        )
+        // --- 分类管理路由（管理员专用）---
+        .route("/admin/categories/merge", post(merge_categories_handler))
+        .route(
+            "/admin/categories/batch-delete",
+            post(batch_delete_categories_handler),
+        )
+        .route(
+            "/admin/categories/usage-stats",
+            get(get_category_usage_stats_handler),
+        )
+        .route(
+            "/admin/categories/similar",
+            get(find_similar_categories_handler),
+        )
+        .route(
+            "/admin/categories/merge-enhanced",
+            post(merge_categories_enhanced_handler),
+        )
+        .route(
+            "/admin/categories/merge-preview",
+            post(get_category_merge_preview_handler),
         )
         // --- Tag 相关的路由 ---
         // GET /tags -> 获取标签列表

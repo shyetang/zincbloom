@@ -17,6 +17,7 @@ const stats = ref<DashboardStats>({
   total_users: 0,
   verified_users: 0,
   unverified_users: 0,
+  recent_posts: [],
 })
 
 const userStats = ref<UserStats | null>(null)

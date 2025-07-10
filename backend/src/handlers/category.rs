@@ -6,7 +6,10 @@ use axum::{
 
 use crate::api_error::ApiError;
 use crate::auth::AuthUser;
-use crate::dtos::category::{CreateCategoryPayload, UpdateCategoryPayload};
+use crate::dtos::category::{
+    BatchDeleteCategoriesPayload, CreateCategoryPayload, MergeCategoriesPayload,
+    MergeCategoriesPreviewPayload, UpdateCategoryPayload,
+};
 use crate::handlers::AppState;
 use uuid::Uuid;
 
@@ -93,4 +96,128 @@ pub async fn delete_category_handler(
     tracing::info!("分类删除成功： ID:{}", id);
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+// === 管理员专用的分类管理功能 ===
+
+/// 合并分类：将多个分类合并为一个目标分类
+pub async fn merge_categories_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<MergeCategoriesPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到分类合并请求：{:?}", payload);
+
+    let result = state
+        .category_service
+        .merge_categories(payload.target_category_id, &payload.source_category_ids)
+        .await?;
+
+    tracing::info!("分类合并成功：{:?}", result);
+
+    Ok(Json(result))
+}
+
+/// 增强版分类合并：提供详细的操作结果和可选的目标分类重命名
+pub async fn merge_categories_enhanced_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<MergeCategoriesPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到增强分类合并请求：{:?}", payload);
+
+    let result = state
+        .category_service
+        .merge_categories_enhanced(
+            payload.target_category_id,
+            &payload.source_category_ids,
+            payload.new_target_name.as_deref(),
+        )
+        .await?;
+
+    tracing::info!("增强分类合并成功：{:?}", result);
+
+    Ok(Json(result))
+}
+
+/// 获取分类合并预览
+pub async fn get_category_merge_preview_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<MergeCategoriesPreviewPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到分类合并预览请求：{:?}", payload);
+
+    let preview = state
+        .category_service
+        .get_merge_preview(payload.target_category_id, &payload.source_category_ids)
+        .await?;
+
+    tracing::info!("分类合并预览生成成功");
+
+    Ok(Json(preview))
+}
+
+/// 批量删除分类
+pub async fn batch_delete_categories_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<BatchDeleteCategoriesPayload>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到批量删除分类请求：{:?}", payload);
+
+    let deleted_count = state
+        .category_service
+        .batch_delete_categories(&payload.category_ids)
+        .await?;
+
+    tracing::info!("批量删除分类成功：删除了 {} 个分类", deleted_count);
+
+    Ok(Json(serde_json::json!({ "deleted_count": deleted_count })))
+}
+
+/// 获取分类使用统计
+pub async fn get_category_usage_stats_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到获取分类使用统计请求");
+
+    let stats = state.category_service.get_category_usage_stats().await?;
+
+    tracing::info!("成功获取 {} 个分类的使用统计", stats.len());
+
+    Ok(Json(stats))
+}
+
+/// 查找相似分类
+pub async fn find_similar_categories_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 授权检查 - 需要分类管理权限
+    auth_user.require_permission("category:manage")?;
+
+    tracing::info!("接收到查找相似分类请求");
+
+    let similar_groups = state.category_service.find_similar_categories().await?;
+
+    tracing::info!("找到 {} 组相似分类", similar_groups.len());
+
+    Ok(Json(similar_groups))
 }

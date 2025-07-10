@@ -11,8 +11,18 @@ pub use post::{
 };
 
 pub use category::{
-    create_category_handler, delete_category_handler, get_category_handler,
-    list_categories_handler, update_category_handler,
+    batch_delete_categories_handler,
+    create_category_handler,
+    delete_category_handler,
+    find_similar_categories_handler,
+    get_category_handler,
+    get_category_merge_preview_handler,
+    get_category_usage_stats_handler,
+    list_categories_handler,
+    merge_categories_enhanced_handler,
+    // 新增的分类合并功能
+    merge_categories_handler,
+    update_category_handler,
 };
 
 pub use tag::{

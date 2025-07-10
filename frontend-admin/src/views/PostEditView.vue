@@ -54,7 +54,7 @@ const fetchPost = async () => {
     if (post.value) {
       formData.value = {
         title: post.value.title,
-        content: post.value.content_markdown, // 编辑时使用原始markdown内容
+        content: post.value.content_markdown || post.value.content || '', // 编辑时使用原始markdown内容
         published_at: post.value.published_at,
         category_ids: post.value.categories?.map((c) => c.id) || [],
         tag_ids: post.value.tags?.map((t) => t.id) || [],
@@ -139,7 +139,7 @@ const openShareDialog = () => {
   if (!post.value) return
 
   shareForm.value = {
-    shared_with: post.value.draft_shared_with || [],
+    shared_with: (post.value.draft_shared_with || []).map(user => user.id),
     is_public: post.value.is_draft_public || false,
     message: '',
   }

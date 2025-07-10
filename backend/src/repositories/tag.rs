@@ -351,15 +351,24 @@ impl TagRepository for PostgresTagRepository {
 
         // 2. 执行合并操作
         for &source_id in source_tag_ids {
+            // 获取当前源标签的文章数，用于验证
+            let source_posts = sqlx::query!(
+                "SELECT COUNT(*) as count FROM post_tags WHERE tag_id = $1",
+                source_id
+            )
+            .fetch_one(&mut *txn)
+            .await?;
+            let source_posts_count = source_posts.count.unwrap_or(0) as u64;
+
             // 转移非重复的关联
-            sqlx::query!(
+            let transferred_rows = sqlx::query!(
                 r#"
                 UPDATE post_tags 
                 SET tag_id = $1 
                 WHERE tag_id = $2 
                 AND NOT EXISTS (
-                    SELECT 1 FROM post_tags 
-                    WHERE post_id = post_tags.post_id AND tag_id = $1
+                    SELECT 1 FROM post_tags pt2
+                    WHERE pt2.post_id = post_tags.post_id AND pt2.tag_id = $1
                 )
                 "#,
                 target_tag_id,
@@ -368,10 +377,21 @@ impl TagRepository for PostgresTagRepository {
             .execute(&mut *txn)
             .await?;
 
-            // 删除所有源标签关联
-            sqlx::query!("DELETE FROM post_tags WHERE tag_id = $1", source_id)
+            // 删除剩余的源标签关联（转移后应该只剩重复的关联）
+            let deleted_rows = sqlx::query!("DELETE FROM post_tags WHERE tag_id = $1", source_id)
                 .execute(&mut *txn)
                 .await?;
+
+            // 验证数据完整性：转移数 + 删除数应该等于原始数
+            let expected_total = transferred_rows.rows_affected() + deleted_rows.rows_affected();
+            if expected_total != source_posts_count {
+                return Err(anyhow::anyhow!(
+                    "数据完整性检查失败：源标签 {} 预期影响 {} 篇文章，实际处理 {} 篇",
+                    source_id,
+                    source_posts_count,
+                    expected_total
+                ));
+            }
         }
 
         // 3. 更新目标标签名称（如果提供）

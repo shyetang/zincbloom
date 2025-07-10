@@ -269,7 +269,7 @@ const getUserStatus = (user: User) => {
 // 打开角色分配弹窗
 const openRoleModal = (user: User) => {
   editingUserForRoles.value = user
-  selectedRoles.value = [...user.roles] // 复制当前用户的角色
+  selectedRoles.value = (user.roles || []).map(role => typeof role === 'string' ? role : role.name) // 复制当前用户的角色名称
   showRoleModal.value = true
 }
 
@@ -429,10 +429,10 @@ onMounted(() => {
                 <div class="user-roles">
                   <span class="status-label">角色:</span>
                   <div class="roles-list">
-                    <span v-for="role in user.roles" :key="role" class="role-badge">
-                      {{ role }}
+                    <span v-for="role in (user.roles || [])" :key="role.id || role.name" class="role-badge">
+                      {{ role.name || role }}
                     </span>
-                    <span v-if="user.roles.length === 0" class="no-roles"> 未分配角色 </span>
+                    <span v-if="!user.roles || user.roles.length === 0" class="no-roles"> 未分配角色 </span>
                   </div>
                 </div>
 
