@@ -1,0 +1,111 @@
+/* 基础样式重置和全局变量 */
+/* Tailwind CSS 由 @nuxt/ui 自动注入，无需手动导入 */
+
+/* 自定义CSS变量（主要用于主题色彩） */
+:root {
+    /* 主题颜色变量 */
+    --color-primary: #3b82f6;
+    --color-primary-dark: #1d4ed8;
+    --color-secondary: #64748b;
+    --color-accent: #8b5cf6;
+
+    /* 语义化颜色 */
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    --color-info: #3b82f6;
+
+    /* 过渡动画 */
+    --transition-fast: 150ms ease-in-out;
+    --transition-base: 250ms ease-in-out;
+    --transition-slow: 350ms ease-in-out;
+}
+
+/* 暗色模式变量 */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-primary: #60a5fa;
+        --color-primary-dark: #3b82f6;
+    }
+}
+
+/* 全局基础样式 */
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 链接样式增强 */
+a {
+    transition: color var(--transition-fast);
+}
+
+/* 博客内容样式（Markdown渲染） */
+.prose {
+    /* 这里将使用 @tailwindcss/typography 插件的样式 */
+    /* 只添加少量自定义增强 */
+}
+
+.prose pre {
+    /* 代码块样式增强 */
+    border-radius: 0.5rem;
+}
+
+.prose blockquote {
+    /* 引用块样式增强 */
+    border-left: 4px solid var(--color-primary);
+}
+
+/* 自定义组件样式 */
+.blog-card {
+    /* 使用 Tailwind utilities 替代自定义CSS */
+    /* 这个类将主要通过组件中的 class 属性来实现 */
+}
+
+/* 加载动画 */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* 工具类（补充Tailwind CSS未覆盖的） */
+.transition-base {
+    transition: all var(--transition-base);
+}
+
+.text-primary {
+    color: var(--color-primary);
+}
+
+.bg-primary {
+    background-color: var(--color-primary);
+}
+
+.border-primary {
+    border-color: var(--color-primary);
+}
+
+/* 响应式容器 */
+.container-blog {
+    @apply max-w-4xl mx-auto px-4 sm:px-6 lg:px-8;
+}
