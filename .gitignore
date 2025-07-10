@@ -77,3 +77,6 @@ lerna-debug.log*
 # 特别是 .local 文件，它们永远不该被提交
 *.local
 **/*.local\n# Ignore markdown and backup files\n*.md\n*.backup
+
+*.md
+*.backup
