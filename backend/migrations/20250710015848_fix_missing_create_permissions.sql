@@ -10,5 +10,4 @@ VALUES
     (gen_random_uuid(), 'tag:create', '创建新标签')
 ON CONFLICT (name) DO NOTHING;
 
--- 确保这些权限已经分配给相应的角色
--- (权限分配在之前的迁移中已经定义，这里只是确保权限存在)
+-- 权限分配在单独的迁移文件中处理

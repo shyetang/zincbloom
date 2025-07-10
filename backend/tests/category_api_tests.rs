@@ -171,6 +171,7 @@ async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Res
 }
 
 /// 注册一个随机的普通用户并登录
+#[allow(dead_code)]
 async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
     let username = format!("user_{}", Uuid::new_v4());
     let email = format!("{}@example.com", &username);

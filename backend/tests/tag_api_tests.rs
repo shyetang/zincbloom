@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use backend::{
     config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
@@ -164,7 +164,7 @@ async fn get_token_for_user(app: &Router, username: &str, password: &str) -> Res
         .to_string())
 }
 
-#[warn(dead_code)]
+#[allow(dead_code)]
 async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
     let username = format!("user_tag_{}", Uuid::new_v4());
     let email = format!("{}@example.com", &username);
