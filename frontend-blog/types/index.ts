@@ -1,201 +1,167 @@
-// 用户相关类型
-export interface User {
+// ====================================
+// 博客前端类型定义
+// 重新导出共享类型，并添加前端特有的类型定义
+// ====================================
+
+// 重新导出所有共享类型
+export * from "@shared/types";
+
+// 前端特有的类型定义
+export interface NavigationItem {
+    name: string;
+    href: string;
+    icon?: string;
+    children?: NavigationItem[];
+}
+
+export interface BreadcrumbItem {
+    name: string;
+    href?: string;
+    current?: boolean;
+}
+
+export interface ToastMessage {
     id: string;
-    username: string;
-    email: string;
-    created_at: string;
-    updated_at?: string;
-    email_verified_at?: string;
-    roles?: string[];
-}
-
-export interface UserPublic {
-    id: string;
-    username: string;
-    email: string;
-    created_at: string;
-    roles: string[];
-}
-
-// 认证相关类型
-export interface LoginCredentials {
-    username: string;
-    password: string;
-}
-
-export interface RegisterData {
-    username: string;
-    email: string;
-    password: string;
-}
-
-export interface LoginResponse {
-    access_token: string;
-    refresh_token: string;
-    user: UserPublic;
-}
-
-// 文章相关类型
-export interface Post {
-    id: string;
+    type: "success" | "error" | "warning" | "info";
     title: string;
-    slug: string;
-    content: string;
-    excerpt?: string;
-    thumbnail?: string;
-    status: "draft" | "published";
-    author_id: string;
-    author: {
-        id: string;
-        username: string;
-    };
-    categories: Category[];
-    tags: Tag[];
-    created_at: string;
-    updated_at: string;
-    published_at?: string;
-}
-
-export interface CreatePostData {
-    title: string;
-    content: string;
-    excerpt?: string;
-    thumbnail?: string;
-    category_ids?: string[];
-    tag_ids?: string[];
-    status?: "draft" | "published";
-}
-
-export interface UpdatePostData extends Partial<CreatePostData> {
-    id: string;
-}
-
-// 分类相关类型
-export interface Category {
-    id: string;
-    name: string;
-    description?: string;
-    slug: string;
-    created_at: string;
-    updated_at: string;
-    post_count?: number;
-}
-
-export interface CreateCategoryData {
-    name: string;
-    description?: string;
-    slug?: string;
-}
-
-// 标签相关类型
-export interface Tag {
-    id: string;
-    name: string;
-    slug: string;
-    created_at: string;
-    updated_at: string;
-    post_count?: number;
-}
-
-export interface CreateTagData {
-    name: string;
-    slug?: string;
-}
-
-// API响应类型
-export interface ApiResponse<T = any> {
-    data: T;
     message?: string;
-}
-
-export interface PaginatedResponse<T> {
-    data: T[];
-    pagination: {
-        page: number;
-        per_page: number;
-        total: number;
-        total_pages: number;
+    duration?: number;
+    action?: {
+        label: string;
+        onClick: () => void;
     };
 }
 
-// 查询参数类型
-export interface PostQueryParams {
-    page?: number;
-    per_page?: number;
+export interface ModalProps {
+    isOpen: boolean;
+    title?: string;
+    size?: "sm" | "md" | "lg" | "xl";
+    onClose: () => void;
+}
+
+export interface PageMeta {
+    title: string;
+    description?: string;
+    keywords?: string[];
+    image?: string;
+    canonical?: string;
+    noindex?: boolean;
+}
+
+export interface RouteParams {
+    slug?: string;
+    id?: string;
+    page?: string;
     category?: string;
     tag?: string;
-    author?: string;
-    search?: string;
-    status?: "draft" | "published";
-}
-
-export interface CategoryQueryParams {
-    page?: number;
-    per_page?: number;
     search?: string;
 }
 
-export interface TagQueryParams {
-    page?: number;
-    per_page?: number;
-    search?: string;
+// 主题相关类型
+export interface ThemeConfig {
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    backgroundColor: string;
+    textColor: string;
+    borderColor: string;
 }
 
-// 表单状态类型
-export interface FormErrors {
-    [key: string]: string;
+// 布局相关类型
+export interface LayoutProps {
+    showSidebar?: boolean;
+    showHeader?: boolean;
+    showFooter?: boolean;
+    maxWidth?: "sm" | "md" | "lg" | "xl" | "2xl" | "full";
 }
 
-// UI状态类型
-export interface UIState {
-    isLoading: boolean;
-    error: string | null;
-    success: string | null;
+// 表单组件类型
+export interface FormFieldProps {
+    label?: string;
+    placeholder?: string;
+    required?: boolean;
+    disabled?: boolean;
+    error?: string;
+    hint?: string;
 }
 
-// 权限相关类型
-export interface Permission {
-    id: string;
+export interface SelectOption {
+    label: string;
+    value: string | number;
+    disabled?: boolean;
+    icon?: string;
+}
+
+// 分页组件类型
+export interface PaginationProps {
+    current: number;
+    total: number;
+    pageSize: number;
+    showSizeChanger?: boolean;
+    showQuickJumper?: boolean;
+    showTotal?: boolean;
+    onChange: (page: number, pageSize: number) => void;
+}
+
+// 搜索组件类型
+export interface SearchProps {
+    placeholder?: string;
+    value?: string;
+    suggestions?: string[];
+    onSearch: (query: string) => void;
+    onSuggestionClick?: (suggestion: string) => void;
+}
+
+// 文章卡片组件类型
+export interface PostCardProps {
+    post: import("@shared/types").Post;
+    variant?: "default" | "featured" | "minimal";
+    showAuthor?: boolean;
+    showDate?: boolean;
+    showExcerpt?: boolean;
+    showTags?: boolean;
+}
+
+// 用户头像组件类型
+export interface AvatarProps {
+    src?: string;
     name: string;
-    description?: string;
-    created_at: string;
-    updated_at: string;
+    size?: "sm" | "md" | "lg" | "xl";
+    shape?: "circle" | "square";
+    fallbackIcon?: string;
 }
 
-export interface Role {
-    id: string;
-    name: string;
-    description?: string;
-    created_at: string;
-    updated_at: string;
-    permissions?: Permission[];
+// 加载状态类型
+export interface LoadingProps {
+    size?: "sm" | "md" | "lg";
+    text?: string;
+    overlay?: boolean;
 }
 
-// 搜索相关类型
-export interface SearchResult {
-    type: "post" | "category" | "tag" | "user";
-    id: string;
-    title: string;
-    excerpt?: string;
-    url: string;
+// 响应式配置
+export interface ResponsiveConfig {
+    mobile: boolean;
+    tablet: boolean;
+    desktop: boolean;
+    largeDesktop: boolean;
 }
 
-// 统计数据类型
-export interface DashboardStats {
-    total_posts: number;
-    published_posts: number;
-    draft_posts: number;
-    total_categories: number;
-    total_tags: number;
-    total_users: number;
-    verified_users: number;
-    unverified_users: number;
-    recent_posts: Post[];
+// 编辑器相关类型
+export interface EditorProps {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    readonly?: boolean;
+    height?: number;
+    toolbar?: boolean;
+    preview?: boolean;
 }
 
-// 错误类型
-export interface ApiError {
-    message: string;
-    code?: string;
-    details?: any;
+export interface EditorConfig {
+    theme: "light" | "dark";
+    fontSize: number;
+    lineHeight: number;
+    wordWrap: boolean;
+    minimap: boolean;
+    lineNumbers: boolean;
 }

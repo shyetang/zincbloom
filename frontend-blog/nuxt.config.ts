@@ -14,7 +14,6 @@ export default defineNuxtConfig({
         "@nuxt/eslint",
         "@nuxt/fonts",
         "@nuxt/icon",
-        "@nuxt/image",
         "@nuxt/ui",
         "@pinia/nuxt",
         "@vueuse/nuxt",
@@ -51,7 +50,11 @@ export default defineNuxtConfig({
                 process.env.NUXT_PUBLIC_API_BASE_URL || "http://localhost:8080",
         },
     },
-    
+
+    // 路径别名配置
+    alias: {
+        "@shared": "../shared",
+    },
 
     // 构建配置
     nitro: {

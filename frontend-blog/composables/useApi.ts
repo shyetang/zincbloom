@@ -1,253 +1,325 @@
-import type { ApiResponse, ApiError } from "~/types";
+// API 客户端 Composable
+import type {
+    ApiResponse,
+    ApiError,
+    LoginCredentials,
+    RegisterData,
+    LoginResponse,
+    Post,
+    Category,
+    Tag,
+    User,
+    PaginatedResponse,
+    PostQueryParams,
+    CategoryQueryParams,
+    TagQueryParams,
+} from "@shared/types";
+import {
+    API_ENDPOINTS,
+    HTTP_STATUS,
+    ERROR_CODES,
+    STORAGE_KEYS,
+} from "@shared/constants";
 
-// API客户端类
+interface ApiClientConfig {
+    baseURL: string;
+    timeout?: number;
+}
+
 class ApiClient {
     private baseURL: string;
-    private token: string | null = null;
+    private timeout: number;
 
-    constructor(baseURL: string) {
-        this.baseURL = baseURL;
-        this.loadTokenFromStorage();
+    constructor(config: ApiClientConfig) {
+        this.baseURL = config.baseURL;
+        this.timeout = config.timeout || 10000;
     }
 
-    // 从localStorage加载token
-    private loadTokenFromStorage() {
-        if (process.client) {
-            this.token = localStorage.getItem("access_token");
-        }
-    }
+    private async request<T>(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<ApiResponse<T>> {
+        const url = `${this.baseURL}${endpoint}`;
 
-    // 设置token
-    setToken(token: string) {
-        this.token = token;
-        if (process.client) {
-            localStorage.setItem("access_token", token);
-        }
-    }
+        // 获取访问令牌
+        const token = this.getAccessToken();
 
-    // 清除token
-    clearToken() {
-        this.token = null;
-        if (process.client) {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("refresh_token");
-        }
-    }
-
-    // 获取请求头
-    private getHeaders(customHeaders: Record<string, string> = {}) {
-        const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-            ...customHeaders,
+        const config: RequestInit = {
+            ...options,
+            headers: {
+                "Content-Type": "application/json",
+                ...options.headers,
+                ...(token && { Authorization: `Bearer ${token}` }),
+            },
         };
 
-        if (this.token) {
-            headers.Authorization = `Bearer ${this.token}`;
-        }
-
-        return headers;
-    }
-
-    // 处理响应错误
-    private handleError(error: any): never {
-        if (error.response) {
-            // 服务器返回错误响应
-            const apiError: ApiError = {
-                message:
-                    error.response._data?.message ||
-                    error.response.statusText ||
-                    "请求失败",
-                code: error.response.status?.toString(),
-                details: error.response._data,
-            };
-            throw apiError;
-        } else if (error.request) {
-            // 网络错误
-            const networkError: ApiError = {
-                message: "网络连接失败，请检查网络设置",
-                code: "NETWORK_ERROR",
-            };
-            throw networkError;
-        } else {
-            // 其他错误
-            const unknownError: ApiError = {
-                message: error.message || "未知错误",
-                code: "UNKNOWN_ERROR",
-            };
-            throw unknownError;
-        }
-    }
-
-    // 刷新token
-    private async refreshToken(): Promise<string> {
-        const refreshToken = process.client
-            ? localStorage.getItem("refresh_token")
-            : null;
-        if (!refreshToken) {
-            throw new Error("No refresh token available");
-        }
-
         try {
-            const response = await $fetch<{
-                access_token: string;
-                refresh_token: string;
-            }>("/auth/refresh", {
-                method: "POST",
-                baseURL: this.baseURL,
-                body: { refresh_token: refreshToken },
+            const controller = new AbortController();
+            const timeoutId = setTimeout(
+                () => controller.abort(),
+                this.timeout
+            );
+
+            const response = await fetch(url, {
+                ...config,
+                signal: controller.signal,
             });
 
-            // 更新token
-            this.setToken(response.access_token);
-            if (process.client) {
-                localStorage.setItem("refresh_token", response.refresh_token);
+            clearTimeout(timeoutId);
+
+            // 处理 token 过期
+            if (response.status === HTTP_STATUS.UNAUTHORIZED) {
+                await this.handleTokenRefresh();
+                // 重试请求
+                const retryToken = this.getAccessToken();
+                if (retryToken && retryToken !== token) {
+                    const retryResponse = await fetch(url, {
+                        ...config,
+                        headers: {
+                            ...config.headers,
+                            Authorization: `Bearer ${retryToken}`,
+                        },
+                    });
+                    return await this.handleResponse<T>(retryResponse);
+                }
             }
 
-            return response.access_token;
+            return await this.handleResponse<T>(response);
         } catch (error) {
-            // 刷新失败，清除所有token
-            this.clearToken();
+            if (error instanceof Error && error.name === "AbortError") {
+                throw new Error("请求超时");
+            }
             throw error;
         }
     }
 
-    // 通用请求方法
-    private async request<T>(
-        url: string,
-        options: {
-            method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-            body?: any;
-            headers?: Record<string, string>;
-            retry?: boolean;
-        } = {}
-    ): Promise<T> {
-        const { method = "GET", body, headers = {}, retry = true } = options;
+    private async handleResponse<T>(
+        response: Response
+    ): Promise<ApiResponse<T>> {
+        const contentType = response.headers.get("content-type");
+        const isJson = contentType?.includes("application/json");
+
+        let data: any;
+        if (isJson) {
+            data = await response.json();
+        } else {
+            data = await response.text();
+        }
+
+        if (!response.ok) {
+            const error: ApiError = {
+                message: data?.message || `HTTP Error: ${response.status}`,
+                code: data?.code || ERROR_CODES.NETWORK_ERROR,
+                details: data,
+            };
+            throw error;
+        }
+
+        return {
+            data,
+            message: data?.message,
+            status: response.status,
+        };
+    }
+
+    private getAccessToken(): string | null {
+        if (import.meta.client) {
+            return localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        }
+        return null;
+    }
+
+    private getRefreshToken(): string | null {
+        if (import.meta.client) {
+            return localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        }
+        return null;
+    }
+
+    private async handleTokenRefresh(): Promise<void> {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) {
+            this.clearTokens();
+            await navigateTo("/auth/login");
+            return;
+        }
 
         try {
-            const response = await $fetch<T>(url, {
-                method,
-                baseURL: this.baseURL,
-                headers: this.getHeaders(headers),
-                body: body ? JSON.stringify(body) : undefined,
-            });
-
-            return response;
-        } catch (error: any) {
-            // 如果是401错误且还没重试过，尝试刷新token
-            if (error.response?.status === 401 && retry && this.token) {
-                try {
-                    await this.refreshToken();
-                    // 重新发送请求（设置retry为false避免无限循环）
-                    return this.request<T>(url, { ...options, retry: false });
-                } catch (refreshError) {
-                    // 刷新失败，抛出原始错误
-                    this.handleError(error);
+            const response = await fetch(
+                `${this.baseURL}${API_ENDPOINTS.AUTH.REFRESH}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ refresh_token: refreshToken }),
                 }
-            }
+            );
 
-            this.handleError(error);
+            if (response.ok) {
+                const data = await response.json();
+                if (import.meta.client) {
+                    localStorage.setItem(
+                        STORAGE_KEYS.ACCESS_TOKEN,
+                        data.access_token
+                    );
+                    if (data.refresh_token) {
+                        localStorage.setItem(
+                            STORAGE_KEYS.REFRESH_TOKEN,
+                            data.refresh_token
+                        );
+                    }
+                }
+            } else {
+                this.clearTokens();
+                await navigateTo("/auth/login");
+            }
+        } catch (error) {
+            this.clearTokens();
+            await navigateTo("/auth/login");
         }
     }
 
-    // GET请求
-    async get<T>(url: string, headers?: Record<string, string>): Promise<T> {
-        return this.request<T>(url, { method: "GET", headers });
+    private clearTokens(): void {
+        if (import.meta.client) {
+            localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        }
     }
 
-    // POST请求
-    async post<T>(
-        url: string,
-        data?: any,
-        headers?: Record<string, string>
-    ): Promise<T> {
-        return this.request<T>(url, { method: "POST", body: data, headers });
+    // ===== 认证相关 API =====
+    async login(
+        credentials: LoginCredentials
+    ): Promise<ApiResponse<LoginResponse>> {
+        return this.request<LoginResponse>(API_ENDPOINTS.AUTH.LOGIN, {
+            method: "POST",
+            body: JSON.stringify(credentials),
+        });
     }
 
-    // PUT请求
-    async put<T>(
-        url: string,
-        data?: any,
-        headers?: Record<string, string>
-    ): Promise<T> {
-        return this.request<T>(url, { method: "PUT", body: data, headers });
+    async register(data: RegisterData): Promise<ApiResponse<LoginResponse>> {
+        return this.request<LoginResponse>(API_ENDPOINTS.AUTH.REGISTER, {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
     }
 
-    // DELETE请求
-    async delete<T>(url: string, headers?: Record<string, string>): Promise<T> {
-        return this.request<T>(url, { method: "DELETE", headers });
+    async logout(): Promise<ApiResponse<void>> {
+        const response = await this.request<void>(API_ENDPOINTS.AUTH.LOGOUT, {
+            method: "POST",
+        });
+        this.clearTokens();
+        return response;
     }
 
-    // PATCH请求
-    async patch<T>(
-        url: string,
-        data?: any,
-        headers?: Record<string, string>
-    ): Promise<T> {
-        return this.request<T>(url, { method: "PATCH", body: data, headers });
+    async getMe(): Promise<ApiResponse<User>> {
+        return this.request<User>(API_ENDPOINTS.USERS.ME);
+    }
+
+    async verifyEmail(token: string): Promise<ApiResponse<void>> {
+        return this.request<void>(API_ENDPOINTS.AUTH.VERIFY_EMAIL, {
+            method: "POST",
+            body: JSON.stringify({ token }),
+        });
+    }
+
+    async forgotPassword(email: string): Promise<ApiResponse<void>> {
+        return this.request<void>(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, {
+            method: "POST",
+            body: JSON.stringify({ email }),
+        });
+    }
+
+    // ===== 文章相关 API =====
+    async getPosts(
+        params?: PostQueryParams
+    ): Promise<ApiResponse<PaginatedResponse<Post>>> {
+        const queryString = params
+            ? `?${new URLSearchParams(params as any).toString()}`
+            : "";
+        return this.request<PaginatedResponse<Post>>(
+            `${API_ENDPOINTS.POSTS.LIST}${queryString}`
+        );
+    }
+
+    async getPost(slug: string): Promise<ApiResponse<Post>> {
+        return this.request<Post>(API_ENDPOINTS.POSTS.DETAIL(slug));
+    }
+
+    async createPost(data: any): Promise<ApiResponse<Post>> {
+        return this.request<Post>(API_ENDPOINTS.POSTS.CREATE, {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
+    }
+
+    async updatePost(id: string, data: any): Promise<ApiResponse<Post>> {
+        return this.request<Post>(API_ENDPOINTS.POSTS.UPDATE(id), {
+            method: "PUT",
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deletePost(id: string): Promise<ApiResponse<void>> {
+        return this.request<void>(API_ENDPOINTS.POSTS.DELETE(id), {
+            method: "DELETE",
+        });
+    }
+
+    // ===== 分类相关 API =====
+    async getCategories(
+        params?: CategoryQueryParams
+    ): Promise<ApiResponse<PaginatedResponse<Category>>> {
+        const queryString = params
+            ? `?${new URLSearchParams(params as any).toString()}`
+            : "";
+        return this.request<PaginatedResponse<Category>>(
+            `${API_ENDPOINTS.CATEGORIES.LIST}${queryString}`
+        );
+    }
+
+    async getCategory(slug: string): Promise<ApiResponse<Category>> {
+        return this.request<Category>(API_ENDPOINTS.CATEGORIES.DETAIL(slug));
+    }
+
+    // ===== 标签相关 API =====
+    async getTags(
+        params?: TagQueryParams
+    ): Promise<ApiResponse<PaginatedResponse<Tag>>> {
+        const queryString = params
+            ? `?${new URLSearchParams(params as any).toString()}`
+            : "";
+        return this.request<PaginatedResponse<Tag>>(
+            `${API_ENDPOINTS.TAGS.LIST}${queryString}`
+        );
+    }
+
+    async getTag(slug: string): Promise<ApiResponse<Tag>> {
+        return this.request<Tag>(API_ENDPOINTS.TAGS.DETAIL(slug));
+    }
+
+    // ===== 搜索相关 API =====
+    async searchPosts(
+        query: string,
+        params?: any
+    ): Promise<ApiResponse<PaginatedResponse<Post>>> {
+        const searchParams = new URLSearchParams({ q: query, ...params });
+        return this.request<PaginatedResponse<Post>>(
+            `${API_ENDPOINTS.SEARCH.POSTS}?${searchParams}`
+        );
     }
 }
 
-// 创建API客户端实例
+// 创建单例 API 客户端
 let apiClient: ApiClient | null = null;
 
-export const useApi = () => {
+export function useApi() {
     if (!apiClient) {
         const config = useRuntimeConfig();
-        apiClient = new ApiClient(config.public.apiBaseUrl as string);
+        apiClient = new ApiClient({
+            baseURL: config.public.apiBaseUrl as string,
+        });
     }
-
     return apiClient;
-};
+}
 
-// 便捷的API调用composable
-export const useApiCall = () => {
-    const api = useApi();
-    const isLoading = ref(false);
-    const error = ref<ApiError | null>(null);
-
-    const execute = async <T>(
-        apiCall: () => Promise<T>,
-        options: {
-            onSuccess?: (data: T) => void;
-            onError?: (error: ApiError) => void;
-            showErrorToast?: boolean;
-        } = {}
-    ): Promise<T | null> => {
-        const { onSuccess, onError, showErrorToast = true } = options;
-
-        try {
-            isLoading.value = true;
-            error.value = null;
-
-            const result = await apiCall();
-
-            if (onSuccess) {
-                onSuccess(result);
-            }
-
-            return result;
-        } catch (err: any) {
-            error.value = err as ApiError;
-
-            if (onError) {
-                onError(err as ApiError);
-            }
-
-            if (showErrorToast) {
-                // 这里可以集成toast通知
-                console.error("API Error:", err.message);
-            }
-
-            return null;
-        } finally {
-            isLoading.value = false;
-        }
-    };
-
-    return {
-        api,
-        isLoading: readonly(isLoading),
-        error: readonly(error),
-        execute,
-    };
-};
+// 导出类型
+export type { ApiClient, ApiClientConfig };
