@@ -239,7 +239,7 @@
 <script setup lang="ts">
 // 路由守卫
 definePageMeta({
-    middleware: ["auth"],
+    middleware: "auth",
 });
 
 // SEO
@@ -304,13 +304,13 @@ const updateProfile = async () => {
         toast.add({
             title: "保存成功",
             description: "个人资料已更新",
-            color: "green",
+            color: "success",
         });
-    } catch (error) {
+    } catch {
         toast.add({
             title: "保存失败",
             description: "更新个人资料时发生错误",
-            color: "red",
+            color: "error",
         });
     } finally {
         saving.value = false;
@@ -322,7 +322,7 @@ const changePassword = async () => {
         toast.add({
             title: "密码不匹配",
             description: "新密码和确认密码不一致",
-            color: "red",
+            color: "error",
         });
         return;
     }
@@ -341,13 +341,13 @@ const changePassword = async () => {
         toast.add({
             title: "密码更改成功",
             description: "您的密码已更新",
-            color: "green",
+            color: "success",
         });
-    } catch (error) {
+    } catch {
         toast.add({
             title: "更改失败",
             description: "更改密码时发生错误",
-            color: "red",
+            color: "error",
         });
     } finally {
         changingPassword.value = false;
@@ -365,13 +365,13 @@ const updatePreferences = async () => {
 
         toast.add({
             title: "设置已保存",
-            color: "green",
+            color: "success",
         });
-    } catch (error) {
+    } catch {
         toast.add({
             title: "保存失败",
             description: "更新设置时发生错误",
-            color: "red",
+            color: "error",
         });
     }
 };

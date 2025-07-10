@@ -146,43 +146,59 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-    @apply bg-gray-100 dark:bg-gray-800;
+    background-color: rgb(243 244 246);
+}
+
+.dark ::-webkit-scrollbar-track {
+    background-color: rgb(31 41 55);
 }
 
 ::-webkit-scrollbar-thumb {
-    @apply bg-gray-400 dark:bg-gray-600 rounded-full;
+    background-color: rgb(156 163 175);
+    border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background-color: rgb(75 85 99);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-500 dark:bg-gray-500;
+    background-color: rgb(107 114 128);
 }
 
 /* 选择文本的颜色 */
 ::selection {
-    @apply bg-primary-100 text-primary-900;
+    background-color: rgb(219 234 254);
+    color: rgb(30 58 138);
 }
 
 /* 深色模式下的选择文本颜色 */
 .dark ::selection {
-    @apply bg-primary-900 text-primary-100;
+    background-color: rgb(30 58 138);
+    color: rgb(219 234 254);
 }
 
 /* 焦点状态优化 */
 *:focus-visible {
-    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-900;
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(255 255 255);
+}
+
+.dark *:focus-visible {
+    box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(17 24 39);
 }
 
 /* 图片加载优化 */
 img {
-    @apply transition-opacity duration-300;
+    transition: opacity 0.3s;
 }
 
 img[loading="lazy"] {
-    @apply opacity-0;
+    opacity: 0;
 }
 
 img[loading="lazy"].loaded {
-    @apply opacity-100;
+    opacity: 1;
 }
 
 /* 页面过渡动画 */

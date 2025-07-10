@@ -164,18 +164,21 @@ if (token) {
 // 验证邮箱
 async function verifyEmail(verificationToken: string) {
     try {
-        const response = await api.verifyEmail(verificationToken);
+        const response = await $fetch('/api/auth/verify', { 
+            method: 'POST',
+            body: { token: verificationToken }
+        });
 
-        if (response.success) {
+        if ((response as any).success) {
             verificationStatus.value = "success";
             toast.add({
                 title: "验证成功",
                 description: "您的邮箱已成功验证",
-                color: "green",
+                color: "success",
             });
         } else {
             verificationStatus.value = "error";
-            errorMessage.value = response.error?.message || "验证失败，请重试";
+            errorMessage.value = (response as any).error?.message || "验证失败，请重试";
         }
     } catch (error) {
         verificationStatus.value = "error";
@@ -195,13 +198,13 @@ async function resendVerification() {
         toast.add({
             title: "发送成功",
             description: "验证邮件已重新发送，请查看您的邮箱",
-            color: "green",
+            color: "success",
         });
     } catch (error) {
         toast.add({
             title: "发送失败",
             description: "无法发送验证邮件，请稍后重试",
-            color: "red",
+            color: "error",
         });
     } finally {
         resending.value = false;

@@ -43,7 +43,7 @@
                 <UButton
                     @click="resetFilters"
                     variant="outline"
-                    color="gray"
+                    color="neutral"
                     icon="i-heroicons-arrow-path"
                 >
                     重置
@@ -56,7 +56,7 @@
             <USkeleton v-for="i in 5" :key="i" class="h-24 w-full" />
         </div>
 
-        <div v-else-if="posts?.data?.length" class="space-y-6">
+        <div v-else-if="(posts as any)?.data?.length" class="space-y-6">
             <!-- 批量操作 -->
             <div
                 v-if="selectedPosts.length > 0"
@@ -70,7 +70,7 @@
                         <UButton
                             @click="bulkPublish"
                             size="sm"
-                            color="green"
+                            color="success"
                             variant="outline"
                             :loading="bulkActionLoading"
                         >
@@ -79,7 +79,7 @@
                         <UButton
                             @click="bulkDraft"
                             size="sm"
-                            color="yellow"
+                            color="warning"
                             variant="outline"
                             :loading="bulkActionLoading"
                         >
@@ -88,7 +88,7 @@
                         <UButton
                             @click="bulkDelete"
                             size="sm"
-                            color="red"
+                            color="error"
                             variant="outline"
                             :loading="bulkActionLoading"
                         >
@@ -101,7 +101,7 @@
             <!-- 文章项目 -->
             <div class="space-y-4">
                 <div
-                    v-for="post in posts.data"
+                    v-for="post in (posts as any)?.data || []"
                     :key="post.id"
                     class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
                 >
@@ -172,8 +172,8 @@
                                     <UBadge
                                         :color="
                                             post.status === 'published'
-                                                ? 'green'
-                                                : 'yellow'
+                                                ? 'success'
+                                                : 'warning'
                                         "
                                         variant="soft"
                                     >
@@ -188,7 +188,7 @@
                                         <UButton
                                             icon="i-heroicons-ellipsis-vertical"
                                             variant="ghost"
-                                            color="gray"
+                                            color="neutral"
                                             size="sm"
                                         />
                                     </UDropdown>
@@ -212,7 +212,7 @@
                                     v-if="post.tags.length > 3"
                                     variant="soft"
                                     size="xs"
-                                    color="gray"
+                                    color="neutral"
                                 >
                                     +{{ post.tags.length - 3 }}
                                 </UBadge>
@@ -226,8 +226,8 @@
             <div class="flex justify-center">
                 <UPagination
                     v-model="currentPage"
-                    :page-count="posts.pagination.per_page"
-                    :total="posts.pagination.total"
+                    :page-count="(posts as any)?.pagination?.per_page || 10"
+                    :total="(posts as any)?.pagination?.total || 0"
                     :max="7"
                 />
             </div>
@@ -261,7 +261,7 @@ import type { Post } from "~/types";
 
 // 路由守卫
 definePageMeta({
-    middleware: ["auth"],
+    middleware: "auth",
 });
 
 // SEO
@@ -384,7 +384,7 @@ const togglePostStatus = async (post: Post) => {
             description: `文章已${
                 post.status === "published" ? "转为草稿" : "发布"
             }`,
-            color: "green",
+            color: "success",
         });
 
         refresh();
@@ -392,7 +392,7 @@ const togglePostStatus = async (post: Post) => {
         toast.add({
             title: "操作失败",
             description: "更新文章状态时发生错误",
-            color: "red",
+            color: "error",
         });
     }
 };
@@ -406,7 +406,7 @@ const deletePost = async (post: Post) => {
         toast.add({
             title: "删除成功",
             description: "文章已删除",
-            color: "green",
+            color: "success",
         });
 
         refresh();
@@ -414,7 +414,7 @@ const deletePost = async (post: Post) => {
         toast.add({
             title: "删除失败",
             description: "删除文章时发生错误",
-            color: "red",
+            color: "error",
         });
     }
 };
@@ -427,7 +427,7 @@ const bulkPublish = async () => {
 
         toast.add({
             title: "批量发布成功",
-            color: "green",
+            color: "success",
         });
 
         selectedPosts.value = [];
@@ -435,7 +435,7 @@ const bulkPublish = async () => {
     } catch (error) {
         toast.add({
             title: "批量操作失败",
-            color: "red",
+            color: "error",
         });
     } finally {
         bulkActionLoading.value = false;
@@ -450,7 +450,7 @@ const bulkDraft = async () => {
 
         toast.add({
             title: "批量操作成功",
-            color: "green",
+            color: "success",
         });
 
         selectedPosts.value = [];
@@ -458,7 +458,7 @@ const bulkDraft = async () => {
     } catch (error) {
         toast.add({
             title: "批量操作失败",
-            color: "red",
+            color: "error",
         });
     } finally {
         bulkActionLoading.value = false;
@@ -474,7 +474,7 @@ const bulkDelete = async () => {
 
         toast.add({
             title: "批量删除成功",
-            color: "green",
+            color: "success",
         });
 
         selectedPosts.value = [];
@@ -482,7 +482,7 @@ const bulkDelete = async () => {
     } catch (error) {
         toast.add({
             title: "批量操作失败",
-            color: "red",
+            color: "error",
         });
     } finally {
         bulkActionLoading.value = false;

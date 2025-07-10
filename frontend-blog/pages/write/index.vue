@@ -75,13 +75,13 @@
         </div>
 
         <!-- 最近草稿 -->
-        <div v-if="recentDrafts?.length" class="mb-12">
+        <div v-if="(recentDrafts as any)?.data?.length" class="mb-12">
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
                 最近的草稿
             </h2>
             <div class="space-y-4">
                 <div
-                    v-for="draft in recentDrafts"
+                    v-for="draft in (recentDrafts as any)?.data || []"
                     :key="draft.id"
                     class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow"
                 >
@@ -131,7 +131,7 @@
                     <div
                         class="text-3xl font-bold text-primary-600 dark:text-primary-400"
                     >
-                        {{ stats.totalPosts }}
+                        {{ (stats as any)?.totalPosts || 0 }}
                     </div>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         总文章数
@@ -141,7 +141,7 @@
                     <div
                         class="text-3xl font-bold text-green-600 dark:text-green-400"
                     >
-                        {{ stats.publishedPosts }}
+                        {{ (stats as any)?.publishedPosts || 0 }}
                     </div>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         已发布
@@ -151,7 +151,7 @@
                     <div
                         class="text-3xl font-bold text-yellow-600 dark:text-yellow-400"
                     >
-                        {{ stats.draftPosts }}
+                        {{ (stats as any)?.draftPosts || 0 }}
                     </div>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         草稿
@@ -161,7 +161,7 @@
                     <div
                         class="text-3xl font-bold text-blue-600 dark:text-blue-400"
                     >
-                        {{ stats.totalWords }}
+                        {{ (stats as any)?.totalWords || 0 }}
                     </div>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
                         总字数
@@ -244,7 +244,7 @@
 <script setup lang="ts">
 // 路由守卫
 definePageMeta({
-    middleware: ["auth"],
+    middleware: "auth",
 });
 
 // SEO
@@ -266,21 +266,22 @@ const { data: recentDrafts } = await useLazyFetch("/api/posts", {
         order: "desc",
         author: "me",
     },
-    default: () => ({ data: [] }),
+    default: () => ({ data: [] as any[] }),
 });
 
 // 获取统计数据
 const { data: stats } = await useLazyFetch("/api/posts/stats", {
-    default: () => ({
-        totalPosts: 0,
-        publishedPosts: 0,
-        draftPosts: 0,
-        totalWords: 0,
-    }),
+    default: () =>
+        ({
+            totalPosts: 0,
+            publishedPosts: 0,
+            draftPosts: 0,
+            totalWords: 0,
+        } as any),
 });
 
 // 计算草稿数量
-const draftCount = computed(() => stats.value?.draftPosts || 0);
+const draftCount = computed(() => (stats.value as any)?.draftPosts || 0);
 
 // 方法
 const createNewPost = async () => {
@@ -297,16 +298,16 @@ const createNewPost = async () => {
             },
         });
 
-        if (response.success) {
-            router.push(`/write/${response.data.id}`);
+        if ((response as any).success) {
+            router.push(`/write/${(response as any).data.id}`);
         } else {
-            throw new Error(response.error?.message || "创建失败");
+            throw new Error((response as any).error?.message || "创建失败");
         }
     } catch (error) {
         toast.add({
             title: "创建失败",
             description: "无法创建新文章，请稍后重试",
-            color: "red",
+            color: "error",
         });
     } finally {
         creating.value = false;

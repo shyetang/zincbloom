@@ -192,22 +192,23 @@ const handleSubmit = async () => {
             toast.add({
                 title: "注册成功",
                 description: "请查看您的邮箱并点击验证链接",
-                color: "green",
+                color: "success",
             });
 
             router.push("/auth/verify");
         } else {
             toast.add({
                 title: "注册失败",
-                description: result.error?.message || "注册过程中发生错误",
-                color: "red",
+                description:
+                    (result as any).error?.message || "注册过程中发生错误",
+                color: "error",
             });
         }
     } catch (error) {
         toast.add({
             title: "注册失败",
             description: "网络错误，请稍后重试",
-            color: "red",
+            color: "error",
         });
     } finally {
         pending.value = false;
