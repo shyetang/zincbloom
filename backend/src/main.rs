@@ -86,6 +86,7 @@ async fn main() -> Result<()> {
         post_repo.clone(),
         category_repo.clone(),
         tag_repo.clone(),
+        user_repo.clone(),
     ));
 
     // 创建 AppState

@@ -178,14 +178,40 @@ pub async fn batch_delete_categories_handler(
 
     tracing::info!("接收到批量删除分类请求：{:?}", payload);
 
-    let deleted_count = state
-        .category_service
-        .batch_delete_categories(&payload.category_ids)
-        .await?;
+    // 检查是否需要处理孤儿文章
+    let handle_orphaned = matches!(
+        payload.handle_orphaned_posts,
+        Some(crate::dtos::category::OrphanedPostsHandling::AddUncategorizedCategory)
+    );
 
-    tracing::info!("批量删除分类成功：删除了 {} 个分类", deleted_count);
+    if handle_orphaned {
+        // 使用增强版批量删除
+        let response = state
+            .category_service
+            .batch_delete_categories_enhanced(&payload.category_ids, true)
+            .await?;
 
-    Ok(Json(serde_json::json!({ "deleted_count": deleted_count })))
+        tracing::info!("增强版批量删除分类成功：{}", response.operation_summary);
+        Ok(Json(response))
+    } else {
+        // 使用简单版批量删除
+        let deleted_count = state
+            .category_service
+            .batch_delete_categories(&payload.category_ids)
+            .await?;
+
+        tracing::info!("批量删除分类成功：删除了 {} 个分类", deleted_count);
+
+        // 返回与增强版相同的响应结构
+        let response = crate::dtos::category::BatchDeleteCategoriesResponse {
+            deleted_count,
+            affected_post_count: 0, // 简单版本不统计受影响的文章
+            orphaned_post_count: 0,
+            operation_summary: format!("成功删除 {} 个分类", deleted_count),
+        };
+
+        Ok(Json(response))
+    }
 }
 
 /// 获取分类使用统计

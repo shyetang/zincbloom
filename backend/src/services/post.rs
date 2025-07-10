@@ -1,7 +1,9 @@
-use crate::dtos::post::{CategoryDto, CreatePostPayload, PostDetailDto, TagDto, UpdatePostPayload};
+use crate::dtos::post::{
+    CategoryDto, CreatePostPayload, PostDetailDto, TagDto, UpdatePostPayload, UserBasicDto,
+};
 use crate::dtos::{PaginatedResponse, Pagination};
 use crate::models::Post;
-use crate::repositories::{CategoryRepository, PostRepository, TagRepository};
+use crate::repositories::{CategoryRepository, PostRepository, TagRepository, UserRepository};
 use crate::utils::markdown_to_html_safe;
 use anyhow::{Context, Ok, Result, anyhow};
 use slug::slugify;
@@ -14,6 +16,7 @@ pub struct PostService {
     repo: Arc<dyn PostRepository>,
     category_repo: Arc<dyn CategoryRepository>,
     tag_repo: Arc<dyn TagRepository>,
+    user_repo: Arc<dyn UserRepository>,
 }
 
 impl PostService {
@@ -21,11 +24,30 @@ impl PostService {
         repo: Arc<dyn PostRepository>,
         category_repo: Arc<dyn CategoryRepository>,
         tag_repo: Arc<dyn TagRepository>,
+        user_repo: Arc<dyn UserRepository>,
     ) -> Self {
         Self {
             repo,
             category_repo,
             tag_repo,
+            user_repo,
+        }
+    }
+
+    // 辅助方法：获取作者信息
+    async fn get_author_info(&self, author_id: Option<Uuid>) -> Result<Option<UserBasicDto>> {
+        if let Some(id) = author_id {
+            if let Some(user) = self.user_repo.find_by_id(id).await? {
+                Ok(Some(UserBasicDto {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                }))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
         }
     }
 
@@ -36,6 +58,7 @@ impl PostService {
         tags: Vec<TagDto>,
         rendered_html: String,
         accessing_user_id: Option<Uuid>,
+        author: Option<UserBasicDto>,
     ) -> PostDetailDto {
         // 判断是否在访问他人的草稿
         let is_accessing_others_draft = if post.published_at.is_some() {
@@ -55,7 +78,8 @@ impl PostService {
             title: post.title.clone(),
             content_markdown: post.content.clone(),
             content_html: rendered_html,
-            author_id: post.author_id, // 设置作者ID
+            author_id: post.author_id, // 保留以兼容现有代码
+            author,                    // 新增作者详细信息
             created_at: post.created_at,
             updated_at: post.updated_at,
             published_at: post.published_at,
@@ -155,12 +179,16 @@ impl PostService {
         // markdown转换
         let rendered_html = markdown_to_html_safe(&created_post_basic.content);
 
+        // 获取作者信息
+        let author = self.get_author_info(created_post_basic.author_id).await?;
+
         let post_detail_dto = Self::create_post_detail_dto(
             &created_post_basic,
             categories,
             tags,
             rendered_html,
             Some(author_id), // 创建者查看自己的文章
+            author,
         );
         Ok(post_detail_dto)
     }
@@ -189,12 +217,16 @@ impl PostService {
             .await
             .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
 
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
         let post_detail_dto = Self::create_post_detail_dto(
             &post,
             categories,
             tags,
             rendered_html,
             None, // 这里需要调用方传入用户ID来确定是否访问他人草稿
+            author,
         );
         Ok(post_detail_dto)
     }
@@ -223,8 +255,11 @@ impl PostService {
             .await
             .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
 
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
         let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
         Ok(post_detail_dto)
     }
 
@@ -264,8 +299,11 @@ impl PostService {
             // markdown转换
             let rendered_html = markdown_to_html_safe(&post.content);
 
+            // 获取作者信息
+            let author = self.get_author_info(post.author_id).await?;
+
             let post_detail_dto =
-                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
             post_details_list.push(post_detail_dto);
         }
 
@@ -321,8 +359,16 @@ impl PostService {
             // markdown转换
             let rendered_html = markdown_to_html_safe(&post.content);
 
-            let post_detail_dto =
-                Self::create_post_detail_dto(&post, categories, tags, rendered_html, Some(user_id));
+            // 获取作者信息
+            let author = self.get_author_info(post.author_id).await?;
+            let post_detail_dto = Self::create_post_detail_dto(
+                &post,
+                categories,
+                tags,
+                rendered_html,
+                Some(user_id),
+                author,
+            );
             post_details_list.push(post_detail_dto);
         }
 
@@ -367,8 +413,11 @@ impl PostService {
             // markdown转换
             let rendered_html = markdown_to_html_safe(&post.content);
 
+            // 获取作者信息
+            let author = self.get_author_info(post.author_id).await?;
+
             let post_detail_dto =
-                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None,author);
             post_details_list.push(post_detail_dto);
         }
 
@@ -399,8 +448,11 @@ impl PostService {
             .await
             .context(format!("获取已发布文章 {} 的标签失败", post.id))?;
 
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
         let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
         Ok(post_detail_dto)
     }
 
@@ -430,8 +482,11 @@ impl PostService {
             .await
             .context(format!("获取已发布文章 {} 的标签失败", post.id))?;
 
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
         let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
         Ok(post_detail_dto)
     }
 
@@ -484,8 +539,11 @@ impl PostService {
             .await
             .context(format!("获取更新后帖子 {} 的标签失败", post.id))?;
 
+        // 获取作者信息
+        let author = self.get_author_info(post.author_id).await?;
+
         let post_detail_dto =
-            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None, author);
         Ok(post_detail_dto)
     }
 

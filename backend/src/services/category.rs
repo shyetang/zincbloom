@@ -341,6 +341,45 @@ impl CategoryService {
             .context("批量删除分类操作失败")
     }
 
+    /// 增强版批量删除分类（支持孤儿文章处理）
+    pub async fn batch_delete_categories_enhanced(
+        &self,
+        category_ids: &[Uuid],
+        handle_orphaned: bool,
+    ) -> Result<crate::dtos::category::BatchDeleteCategoriesResponse> {
+        // 验证所有分类都存在
+        for &category_id in category_ids {
+            self.get_category_by_id(category_id)
+                .await
+                .context(format!("批量删除：分类 {} 不存在", category_id))?;
+        }
+
+        let (deleted_count, affected_post_count, orphaned_post_count) = self
+            .repo
+            .batch_delete_enhanced(category_ids, handle_orphaned)
+            .await
+            .context("增强版批量删除分类操作失败")?;
+
+        let operation_summary = if handle_orphaned && orphaned_post_count > 0 {
+            format!(
+                "成功删除 {} 个分类，影响了 {} 篇文章，其中 {} 篇孤儿文章已自动归类到'未分类'",
+                deleted_count, affected_post_count, orphaned_post_count
+            )
+        } else {
+            format!(
+                "成功删除 {} 个分类，影响了 {} 篇文章",
+                deleted_count, affected_post_count
+            )
+        };
+
+        Ok(crate::dtos::category::BatchDeleteCategoriesResponse {
+            deleted_count,
+            affected_post_count,
+            orphaned_post_count,
+            operation_summary,
+        })
+    }
+
     /// 获取分类使用统计
     pub async fn get_category_usage_stats(
         &self,

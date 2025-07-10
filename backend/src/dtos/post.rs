@@ -65,6 +65,14 @@ pub struct DraftAccessLogDto {
     pub created_at: DateTime<Utc>,
 }
 
+/// 用户基本信息DTO，用于在文章中显示作者信息
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserBasicDto {
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
+}
+
 /// 用于在获取单个帖子详情时，同时返回帖子的基本信息及其关联的分类和标签信息
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PostDetailDto {
@@ -74,7 +82,8 @@ pub struct PostDetailDto {
     pub title: String,
     pub content_markdown: String, // 用于存放原始 Markdown
     pub content_html: String,     // 用于存放渲染后的 HTML
-    pub author_id: Option<Uuid>,  // 作者ID - 这是缺失的关键字段！
+    pub author_id: Option<Uuid>,  // 保留以兼容现有代码
+    pub author: Option<UserBasicDto>, // 新增作者详细信息
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>,

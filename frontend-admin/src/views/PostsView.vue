@@ -142,7 +142,7 @@ const togglePublish = async (post: Post) => {
 const openShareDialog = (post: Post) => {
   selectedPost.value = post
   shareForm.value = {
-    shared_with: (post.draft_shared_with || []).map(user => user.id),
+    shared_with: (post.draft_shared_with || []).map((user) => user.id),
     is_public: post.is_draft_public || false,
     message: '',
   }
@@ -440,6 +440,7 @@ onMounted(() => {
               <thead>
                 <tr>
                   <th>标题</th>
+                  <th>作者</th>
                   <th>状态</th>
                   <th>分类</th>
                   <th>标签</th>
@@ -456,6 +457,14 @@ onMounted(() => {
                         {{ post.title }}
                       </router-link>
                       <div class="post-slug">{{ post.slug }}</div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="author-cell">
+                      <span v-if="post.author" class="author-name">
+                        {{ post.author.username }}
+                      </span>
+                      <span v-else class="text-gray-500">未知作者</span>
                     </div>
                   </td>
                   <td>
@@ -800,6 +809,15 @@ onMounted(() => {
   font-size: var(--text-sm);
   color: var(--color-gray-500);
   font-family: var(--font-family-mono);
+}
+
+.author-cell {
+  min-width: 120px;
+}
+
+.author-name {
+  font-weight: 500;
+  color: var(--color-gray-800);
 }
 
 .action-buttons {

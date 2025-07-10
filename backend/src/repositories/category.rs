@@ -483,18 +483,69 @@ impl CategoryRepository for PostgresCategoryRepository {
         // 如果需要处理孤儿文章
         let mut orphaned_posts = 0;
         if handle_orphaned {
-            // 这里可以实现孤儿文章处理逻辑
-            // 例如：给没有分类的文章添加"未分类"分类
-        }
+            // 1. 先删除分类关联，然后查找孤儿文章
+            sqlx::query!(
+                "DELETE FROM post_categories WHERE category_id = ANY($1)",
+                category_ids
+            )
+            .execute(&mut *txn)
+            .await
+            .context("删除分类关联失败")?;
 
-        // 删除分类关联
-        sqlx::query!(
-            "DELETE FROM post_categories WHERE category_id = ANY($1)",
-            category_ids
-        )
-        .execute(&mut *txn)
-        .await
-        .context("删除分类关联失败")?;
+            // 2. 查找删除分类后变成孤儿的文章
+            let orphaned_post_ids: Vec<Uuid> = sqlx::query_scalar!(
+                r#"
+                SELECT p.id
+                FROM posts p
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM post_categories pc WHERE pc.post_id = p.id
+                )
+                "#
+            )
+            .fetch_all(&mut *txn)
+            .await
+            .context("查找孤儿文章失败")?;
+
+            orphaned_posts = orphaned_post_ids.len();
+
+            if !orphaned_post_ids.is_empty() {
+                // 3. 确保存在"未分类"分类
+                let uncategorized_category = sqlx::query!(
+                    r#"
+                    INSERT INTO categories (id, name, slug, created_at, updated_at)
+                    VALUES (gen_random_uuid(), '未分类', 'uncategorized', NOW(), NOW())
+                    ON CONFLICT (slug) DO UPDATE SET updated_at = NOW()
+                    RETURNING id
+                    "#
+                )
+                .fetch_one(&mut *txn)
+                .await
+                .context("创建或获取未分类分类失败")?;
+
+                // 4. 将孤儿文章关联到"未分类"分类
+                for post_id in orphaned_post_ids {
+                    sqlx::query!(
+                        "INSERT INTO post_categories (post_id, category_id) VALUES ($1, $2)",
+                        post_id,
+                        uncategorized_category.id
+                    )
+                    .execute(&mut *txn)
+                    .await
+                    .context(format!("将孤儿文章 {} 关联到未分类失败", post_id))?;
+                }
+
+                tracing::info!("已将 {} 篇孤儿文章关联到'未分类'分类", orphaned_posts);
+            }
+        } else {
+            // 不处理孤儿文章，直接删除分类关联
+            sqlx::query!(
+                "DELETE FROM post_categories WHERE category_id = ANY($1)",
+                category_ids
+            )
+            .execute(&mut *txn)
+            .await
+            .context("删除分类关联失败")?;
+        }
 
         // 删除分类
         let result = sqlx::query!("DELETE FROM categories WHERE id = ANY($1)", category_ids)
