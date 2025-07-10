@@ -3,11 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
+    "build": "nuxt build --silent",
+    "build:verbose": "nuxt build",
+    "build:analyze": "nuxt build --analyze",
     "dev": "nuxt dev",
+    "dev:silent": "nuxt dev --silent",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "nuxi typecheck",
+    "clean": "rm -rf .nuxt .output dist node_modules/.cache"
   },
   "dependencies": {
     "@nuxt/eslint": "1.5.2",

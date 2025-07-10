@@ -9,6 +9,8 @@
                     :src="post.thumbnail"
                     :alt="post.title"
                     class="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    @error="handleImageError"
                 />
             </NuxtLink>
         </div>
@@ -16,7 +18,10 @@
         <!-- 文章内容 -->
         <div class="p-6">
             <!-- 分类和标签 -->
-            <div class="flex items-center gap-2 mb-3">
+            <div
+                v-if="post.categories?.length"
+                class="flex items-center gap-2 mb-3"
+            >
                 <UBadge
                     v-for="category in post.categories"
                     :key="category.id"
@@ -35,7 +40,7 @@
                     :to="`/posts/${post.slug}`"
                     class="hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                 >
-                    {{ post.title }}
+                    {{ post.title || "无标题" }}
                 </NuxtLink>
             </h3>
 
@@ -43,13 +48,13 @@
             <p
                 class="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-3"
             >
-                {{ post.excerpt || getExcerptFromContent(post.content) }}
+                {{ computedExcerpt }}
             </p>
 
             <!-- 标签 -->
             <div v-if="post.tags?.length" class="flex flex-wrap gap-1 mb-4">
                 <UBadge
-                    v-for="tag in post.tags.slice(0, 3)"
+                    v-for="tag in displayTags"
                     :key="tag.id"
                     :label="`#${tag.name}`"
                     color="neutral"
@@ -88,7 +93,7 @@
 
                 <!-- 发布时间 -->
                 <div class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ formatDate(post.published_at || post.created_at) }}
+                    {{ formattedDate }}
                 </div>
             </div>
         </div>
@@ -98,54 +103,100 @@
 <script setup lang="ts">
 import type { Post } from "~/types";
 
-defineProps<{
+const props = defineProps<{
     post: Post;
 }>();
 
+// 计算属性：处理摘要
+const computedExcerpt = computed(() => {
+    if (props.post.excerpt) {
+        return props.post.excerpt;
+    }
+    return getExcerptFromContent(props.post.content || "");
+});
+
+// 计算属性：显示的标签（最多3个）
+const displayTags = computed(() => {
+    return props.post.tags?.slice(0, 3) || [];
+});
+
+// 计算属性：格式化的日期
+const formattedDate = computed(() => {
+    const dateString = props.post.published_at || props.post.created_at;
+    if (!dateString) return "未知时间";
+    return formatDate(dateString);
+});
+
 // 工具函数：从内容中提取摘要
 const getExcerptFromContent = (content: string): string => {
-    if (!content) return "";
+    if (!content) return "暂无内容";
 
-    // 移除 Markdown 标记
-    const plainText = content
-        .replace(/#{1,6}\s+/g, "") // 移除标题标记
-        .replace(/\*\*(.*?)\*\*/g, "$1") // 移除粗体标记
-        .replace(/\*(.*?)\*/g, "$1") // 移除斜体标记
-        .replace(/`(.*?)`/g, "$1") // 移除行内代码标记
-        .replace(/\[(.*?)\]\(.*?\)/g, "$1") // 移除链接，保留文本
-        .replace(/!\[.*?\]\(.*?\)/g, "") // 移除图片
-        .replace(/```[\s\S]*?```/g, "") // 移除代码块
-        .replace(/\n\s*\n/g, " ") // 替换多个换行为空格
-        .trim();
+    try {
+        // 移除 Markdown 标记
+        const plainText = content
+            .replace(/#{1,6}\s+/g, "") // 移除标题标记
+            .replace(/\*\*(.*?)\*\*/g, "$1") // 移除粗体标记
+            .replace(/\*(.*?)\*/g, "$1") // 移除斜体标记
+            .replace(/`(.*?)`/g, "$1") // 移除行内代码标记
+            .replace(/\[(.*?)\]\(.*?\)/g, "$1") // 移除链接，保留文本
+            .replace(/!\[.*?\]\(.*?\)/g, "") // 移除图片
+            .replace(/```[\s\S]*?```/g, "") // 移除代码块
+            .replace(/\n\s*\n/g, " ") // 替换多个换行为空格
+            .trim();
 
-    return plainText.length > 150
-        ? plainText.substring(0, 150) + "..."
-        : plainText;
+        return plainText.length > 150
+            ? plainText.substring(0, 150) + "..."
+            : plainText;
+    } catch (error) {
+        console.warn("提取摘要时出错:", error);
+        return "内容摘要提取失败";
+    }
 };
 
 // 工具函数：格式化日期
 const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    try {
+        const date = new Date(dateString);
 
-    if (diffDays === 1) {
-        return "昨天";
-    } else if (diffDays < 7) {
-        return `${diffDays} 天前`;
-    } else if (diffDays < 30) {
-        const weeks = Math.floor(diffDays / 7);
-        return `${weeks} 周前`;
-    } else if (diffDays < 365) {
-        const months = Math.floor(diffDays / 30);
-        return `${months} 个月前`;
-    } else {
-        return date.toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
+        // 检查日期是否有效
+        if (isNaN(date.getTime())) {
+            return "日期格式错误";
+        }
+
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - date.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1) {
+            return "昨天";
+        } else if (diffDays < 7) {
+            return `${diffDays} 天前`;
+        } else if (diffDays < 30) {
+            const weeks = Math.floor(diffDays / 7);
+            return `${weeks} 周前`;
+        } else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            return `${months} 个月前`;
+        } else {
+            return date.toLocaleDateString("zh-CN", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            });
+        }
+    } catch (error) {
+        console.warn("格式化日期时出错:", error);
+        return "时间未知";
+    }
+};
+
+// 图片错误处理
+const handleImageError = (event: Event) => {
+    const img = event.target as HTMLImageElement;
+    if (img) {
+        // 可以设置一个默认图片或隐藏图片
+        img.style.display = "none";
+        console.warn("图片加载失败:", img.src);
     }
 };
 </script>
