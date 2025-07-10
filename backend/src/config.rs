@@ -34,12 +34,21 @@ pub struct ServerConfig {
     pub host: String,
 }
 
+// 草稿隐私策略配置
+#[derive(Debug, Deserialize, Clone)]
+pub struct DraftPolicy {
+    pub mode: String, // "private" | "team_collaborative" | "traditional"
+    pub admin_access_all_drafts: bool,
+    pub audit_draft_access: bool,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub database: DatabaseConfig,
     pub server: ServerConfig,
     pub auth: AuthConfig,
     pub email: EmailConfig,
+    pub draft_policy: DraftPolicy,
 }
 
 impl AppConfig {
@@ -67,6 +76,10 @@ impl AppConfig {
             .set_default("email.smtp_user","")?
             .set_default("email.smtp_pass","")?
             .set_default("email.from_address","np-reply@localhost.com")?
+            // 草稿策略默认值
+            .set_default("draft_policy.mode", "private")?
+            .set_default("draft_policy.admin_access_all_drafts", false)?
+            .set_default("draft_policy.audit_draft_access", true)?
             // .set_default(...)? // 其他默认值
 
             // 从环境变量加载配置

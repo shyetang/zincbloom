@@ -6,7 +6,7 @@ use axum::{
 };
 use backend::utils::hash_password;
 use backend::{
-    config::{AppConfig, AuthConfig, DatabaseConfig, EmailConfig, ServerConfig},
+    config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
     dtos::{
         post::{CreatePostPayload, PostDetailDto, UpdatePostPayload},
         PaginatedResponse,
@@ -78,6 +78,11 @@ async fn setup_test_app(pool: PgPool) -> Router {
             smtp_user: "".to_string(),
             smtp_pass: "".to_string(),
             from_address: "test@example.com".to_string(),
+        },
+        draft_policy: DraftPolicy {
+            mode: "private".to_string(),
+            admin_access_all_drafts: false,
+            audit_draft_access: true,
         },
     };
 
@@ -153,8 +158,8 @@ async fn seed_user_with_role(pool: &PgPool, name: &str, role_name: &str) -> Resu
 
     let user = sqlx::query_as!(
         User,
-        r#"INSERT INTO users (id, username, email, hashed_password) VALUES ($1, $2, $3, $4)
-           RETURNING id, username, email, hashed_password, created_at, updated_at,email_verified_at"#,
+        r#"INSERT INTO users (id, username, email, hashed_password, email_verified_at) VALUES ($1, $2, $3, $4, NOW())
+           RETURNING id, username, email, hashed_password, created_at, updated_at, email_verified_at"#,
         Uuid::new_v4(),
         name,
         format!("{}@example.com", name),
@@ -208,7 +213,8 @@ async fn register_and_login_new_user(app: &Router) -> Result<(String, Uuid)> {
     let register_payload = serde_json::json!({
         "username": &username,
         "email": &email,
-        "password": &password
+        "password": &password,
+        "confirm_password": &password
     });
     let _ = app
         .clone()
@@ -262,9 +268,9 @@ async fn seed_one_post(
     let post = sqlx::query_as!(
         Post,
         r#"
-        INSERT INTO posts (id, slug, title, content, author_id, published_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, slug, title, content, author_id, created_at, updated_at, published_at
+        INSERT INTO posts (id, slug, title, content, author_id, published_at, draft_shared_with, is_draft_public)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, slug, title, content, author_id, created_at, updated_at, published_at, draft_shared_with, is_draft_public
         "#,
         Uuid::new_v4(),
         slug,
@@ -275,7 +281,9 @@ async fn seed_one_post(
             Some(chrono::Utc::now())
         } else {
             None
-        }
+        },
+        None::<&[Uuid]>, // draft_shared_with
+        Some(false)      // is_draft_public
     )
     .fetch_one(pool)
     .await?;
@@ -286,7 +294,7 @@ async fn seed_one_post(
 async fn seed_one_category(pool: &PgPool, name: &str) -> Result<Category> {
     sqlx::query_as!(
         Category,
-        r#"INSERT INTO categories (id, name, slug) VALUES ($1, $2, $3) RETURNING *"#,
+        r#"INSERT INTO categories (id, name, slug) VALUES ($1, $2, $3) RETURNING *;"#,
         Uuid::new_v4(),
         name,
         slugify(name)
@@ -299,7 +307,7 @@ async fn seed_one_category(pool: &PgPool, name: &str) -> Result<Category> {
 async fn seed_one_tag(pool: &PgPool, name: &str) -> Result<Tag> {
     sqlx::query_as!(
         Tag,
-        r#"INSERT INTO tags (id, name, slug) VALUES ($1, $2, $3) RETURNING *"#,
+        r#"INSERT INTO tags (id, name, slug) VALUES ($1, $2, $3) RETURNING *;"#,
         Uuid::new_v4(),
         name,
         slugify(name)
@@ -321,9 +329,11 @@ async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
 
     let payload = CreatePostPayload {
         title: "一个由普通用户创建的帖子".to_string(),
-        content: "这是帖子的**Markdown**内容...".to_string(), // 使用 Markdown
+        content: "这是帖子的**Markdown**内容...".to_string(),
         category_ids: None,
         tag_ids: None,
+        draft_shared_with: None,
+        is_draft_public: None,
     };
 
     // 执行
@@ -347,6 +357,7 @@ async fn test_create_post_as_user_success(pool: PgPool) -> Result<()> {
         created_post.content_html,
         "<p>这是帖子的<strong>Markdown</strong>内容...</p>\n"
     );
+    assert_eq!(created_post.author_id, Some(user_id));
 
     // 从数据库验证作者ID是否正确
     let db_post = sqlx::query_as!(Post, "SELECT * FROM posts WHERE id = $1", created_post.id)
@@ -369,6 +380,8 @@ async fn test_create_post_with_associations_success(pool: PgPool) -> Result<()> 
         content: "内容...".to_string(),
         category_ids: Some(vec![category.id]),
         tag_ids: Some(vec![tag.id]),
+        draft_shared_with: None,
+        is_draft_public: None,
     };
 
     let request = Request::builder()
@@ -401,6 +414,8 @@ async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
         content: "...".into(),
         category_ids: None,
         tag_ids: None,
+        draft_shared_with: None,
+        is_draft_public: None,
     };
 
     let request = Request::builder()
@@ -419,13 +434,14 @@ async fn test_create_post_no_token_fails(pool: PgPool) -> Result<()> {
 #[sqlx::test]
 async fn test_list_posts_pagination(pool: PgPool) -> Result<()> {
     let app = setup_test_app(pool.clone()).await;
-    let (_token, user_id) = register_and_login_new_user(&app).await?;
+    let (token, user_id) = register_and_login_new_user(&app).await?;
     for i in 0..15 {
         seed_one_post(&pool, user_id, &format!("Post {}", i), "list content", true).await?;
     }
 
     let request = Request::builder()
         .uri("/posts?page=2&page_size=5")
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
@@ -448,7 +464,7 @@ async fn test_list_posts_pagination(pool: PgPool) -> Result<()> {
 #[sqlx::test]
 async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
     let app = setup_test_app(pool.clone()).await;
-    let (_token, user_id) = register_and_login_new_user(&app).await?;
+    let (token, user_id) = register_and_login_new_user(&app).await?;
     let markdown_content = "# Slug测试\n\n- item 1\n- item 2";
     let expected_html = "<h1>Slug测试</h1>\n<ul>\n<li>item 1</li>\n<li>item 2</li>\n</ul>\n";
     let seeded_post = seed_one_post(
@@ -462,6 +478,7 @@ async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
 
     let request = Request::builder()
         .uri(format!("/posts/{}", seeded_post.slug))
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())?;
     let response = app.oneshot(request).await?;
 
@@ -483,7 +500,7 @@ async fn test_get_post_by_slug_success(pool: PgPool) -> Result<()> {
 async fn test_update_own_post_success(pool: PgPool) -> Result<()> {
     let app = setup_test_app(pool.clone()).await;
     let (token, user_id) = register_and_login_new_user(&app).await?;
-    let original_post = seed_one_post(&pool, user_id, "我的原始帖子", "原始内容", true).await?;
+    let original_post = seed_one_post(&pool, user_id, "我的原始帖子", "原始内容", false).await?;
 
     let payload = UpdatePostPayload {
         title: Some("我的更新后的帖子标题".to_string()),

@@ -1,15 +1,15 @@
 use anyhow::Result;
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use backend::services::auth::LoginTokens;
 use backend::services::{
     AdminService, AuthService, CategoryService, EmailService, PostService, TagService, UserService,
 };
 use backend::{
-    config::{AppConfig, AuthConfig, DatabaseConfig, ServerConfig},
+    config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
     dtos::auth::{LoginResponsePayload, RefreshTokenPayload},
     handlers::AppState,
     routes::create_router,
@@ -54,12 +54,17 @@ async fn setup_test_app(pool: PgPool) -> Router {
             max_login_failures: 5,
             lockout_duration_seconds: 900,
         },
-        email: backend::config::EmailConfig {
+        email: EmailConfig {
             smtp_host: "localhost".to_string(),
             smtp_port: 1025,
             smtp_user: "".to_string(),
             smtp_pass: "".to_string(),
-            from_address: "test@localhost".to_string(),
+            from_address: "test@example.com".to_string(),
+        },
+        draft_policy: DraftPolicy {
+            mode: "private".to_string(),
+            admin_access_all_drafts: false,
+            audit_draft_access: true,
         },
     };
 

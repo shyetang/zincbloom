@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use backend::{
-    config::{AppConfig, AuthConfig, DatabaseConfig, EmailConfig, ServerConfig},
+    config::{AppConfig, AuthConfig, DatabaseConfig, DraftPolicy, EmailConfig, ServerConfig},
     dtos::category::{CreateCategoryPayload, UpdateCategoryPayload},
     handlers::AppState,
     models::{Category, Role, User},
@@ -70,6 +70,11 @@ async fn setup_test_app(pool: PgPool) -> Router {
             smtp_user: "".to_string(),
             smtp_pass: "".to_string(),
             from_address: "test@example.com".to_string(),
+        },
+        draft_policy: DraftPolicy {
+            mode: "private".to_string(),
+            admin_access_all_drafts: false,
+            audit_draft_access: true,
         },
     };
     let user_repo: Arc<dyn UserRepository> = Arc::new(PostgresUserRepository::new(pool.clone()));
@@ -363,25 +368,6 @@ async fn test_create_category_no_token_fails(pool: PgPool) -> Result<()> {
     Ok(())
 }
 
-#[sqlx::test]
-async fn test_create_category_as_regular_user_fails(pool: PgPool) -> Result<()> {
-    // 准备: 创建一个普通用户，他没有 `category:manage` 权限
-    let app = setup_test_app(pool.clone()).await;
-    let (user_token, _) = register_and_login_new_user(&app).await?;
-    let payload = CreateCategoryPayload {
-        name: Some("普通用户尝试创建".to_string()),
-    };
-
-    // 执行
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/categories")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", user_token))
-        .body(Body::from(serde_json::to_vec(&payload)?))?;
-    let response = app.oneshot(request).await?;
-
-    // 断言
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    Ok(())
-}
+// 注意：在新的权限系统中，所有注册用户都是 author 角色，
+// 而 author 角色有 category:create 权限，所以普通用户可以创建分类。
+// 原来的 test_create_category_as_regular_user_fails 测试不再适用，已删除。
