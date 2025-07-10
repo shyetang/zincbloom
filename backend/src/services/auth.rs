@@ -1,20 +1,20 @@
 use crate::config::AppConfig;
+use crate::dtos::admin::{UserLoginPayload, UserRegistrationPayload};
 use crate::dtos::auth::ResetPasswordPayload;
-use crate::dtos::{UserLoginPayload, UserRegistrationPayload};
 use crate::models::{User, UserPublic};
 use crate::repositories::{
     LoginAttemptRepository, OneTimeTokenRepository, RoleRepository, UserRepository,
 };
 use crate::services::EmailService;
 use crate::utils::{hash_password, validate_password_strength, verify_password};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
-use rand::distr::Alphanumeric;
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, TokenData, Validation, decode, encode};
 use rand::Rng;
+use rand::distr::Alphanumeric;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing;
 use uuid::Uuid;
 
@@ -42,7 +42,7 @@ pub struct LoginTokens {
 #[derive(Clone)]
 pub struct AuthService {
     user_repo: Arc<dyn UserRepository>,
-    role_repo: Arc<dyn RoleRepository>, // 在注册时分配默认角色，需要 RoleRepository
+    role_repo: Arc<dyn RoleRepository>,
     login_attempt_repo: Arc<dyn LoginAttemptRepository>,
     one_time_token_repo: Arc<dyn OneTimeTokenRepository>,
     email_service: Arc<EmailService>,
@@ -116,7 +116,7 @@ impl AuthService {
         }
     }
 
-    // 用户注册服务方法
+    // 用户注册服务方法(在事务中进行)
     pub async fn register_user(&self, payload: UserRegistrationPayload) -> Result<UserPublic> {
         // 验证密码策略
         validate_password_strength(&payload.password).context("用户注册时密码强度验证失败")?;

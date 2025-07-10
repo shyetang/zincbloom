@@ -10,6 +10,10 @@ pub struct LoginAttempt {
     pub lockout_expires_at: Option<DateTime<Utc>>,
 }
 
+#[cfg(test)]
+use mockall::automock;
+
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait LoginAttemptRepository: Send + Sync {
     // 获取一个用户的登录尝试状态

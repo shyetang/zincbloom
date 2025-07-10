@@ -1,7 +1,7 @@
 use crate::api_error::ApiError;
-use crate::auth::AuthUser;
-use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
+use crate::auth::{AuthUser, OptionalAuth};
 use crate::dtos::Pagination;
+use crate::dtos::post::{CreatePostPayload, UpdatePostPayload};
 use crate::handlers::AppState;
 use anyhow::Result;
 use axum::extract::{Json, Path, Query, State};
@@ -30,25 +30,134 @@ pub async fn create_post_handler(
     Ok((StatusCode::CREATED, Json(post_detail))) // 成功返回 201 CREATED 和 JSON 数据
 }
 
-// 获取文章列表处理器
+// 获取文章列表处理器（管理界面专用）
 pub async fn list_posts_handler(
+    auth_user: AuthUser, // 要求认证用户
     State(state): State<AppState>,
     Query(pagination): Query<Pagination>, // 使用 Query 提取器获取分页参数
 ) -> Result<impl IntoResponse, ApiError> {
-    // 将提取到的 pagination 参数传递给 service 方法
-    let paginated_response = state.post_service.list_posts(pagination).await?;
+    let user_id = auth_user.user_id();
+
+    // 检查用户权限：是否可以在管理界面查看所有文章
+    // post:read_any 用于管理界面的超级权限
+    let can_manage_any = auth_user.require_permission("post:read_any").is_ok()
+        || auth_user.require_permission("post:manage_any").is_ok();
+
+    // 如果用户没有管理任意文章的权限，检查基本权限
+    if !can_manage_any {
+        // 检查是否有管理自己文章的权限或者草稿读取权限
+        let has_manage_own = auth_user.require_permission("post:manage_own").is_ok();
+        let has_draft_read = auth_user.require_permission("post:draft:read_own").is_ok();
+
+        // 添加调试日志
+        tracing::info!(
+            "用户 {} 权限检查: can_manage_any={}, has_manage_own={}, has_draft_read={}",
+            user_id,
+            can_manage_any,
+            has_manage_own,
+            has_draft_read
+        );
+
+        if !has_manage_own && !has_draft_read {
+            return Err(ApiError::from(anyhow::anyhow!(
+                "您没有权限访问文章管理界面"
+            )));
+        }
+    }
+
+    // 使用新的带权限的方法
+    let paginated_response = state
+        .post_service
+        .list_posts_with_permission(pagination, user_id, can_manage_any)
+        .await?;
+
+    // 添加调试日志显示返回的文章数量
+    tracing::info!(
+        "用户 {} 获取文章列表成功，返回 {} 篇文章",
+        user_id,
+        paginated_response.items.len()
+    );
+
     Ok(Json(paginated_response))
 }
 
-// 获取单篇文章处理器
+// 获取已发布文章列表处理器（博客展示界面专用，支持游客和认证用户）
+pub async fn list_published_posts_handler(
+    _optional_auth: OptionalAuth, // 使用可选认证，支持游客访问
+    State(state): State<AppState>,
+    Query(pagination): Query<Pagination>, // 使用 Query 提取器获取分页参数
+) -> Result<impl IntoResponse, ApiError> {
+    // 调用专门的公开文章列表方法，所有人都可以访问
+    let paginated_response = state.post_service.list_published_posts(pagination).await?;
+    Ok(Json(paginated_response))
+}
+
+// 获取单篇文章处理器（管理界面专用，需要认证）
 pub async fn get_post_handler(
+    auth_user: AuthUser, // 管理界面需要认证
+    State(state): State<AppState>,
+    Path(id_or_slug): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查权限：是否可以查看任意文章（管理员）或只能查看自己的文章
+    let can_read_any = auth_user.require_permission("post:read_any").is_ok()
+        || auth_user.require_permission("post:manage_any").is_ok();
+
+    if !can_read_any {
+        // 如果不是管理员，需要验证是否有管理自己文章的权限
+        auth_user.require_permission("post:manage_own")?;
+    }
+
+    // 尝试解析为UUID
+    let post_detail = match Uuid::parse_str(&id_or_slug) {
+        Ok(id) => {
+            let post = state.post_service.get_post_by_id(id).await?;
+
+            // 如果不是管理员，检查文章所有权
+            if !can_read_any {
+                if let Some(author_id) = state.post_service.get_post_author(id).await? {
+                    if author_id != user_id {
+                        return Err(ApiError::from(anyhow::anyhow!("您只能查看自己的文章")));
+                    }
+                }
+            }
+
+            post
+        }
+        Err(_) => {
+            let post = state.post_service.get_post_by_slug(&id_or_slug).await?;
+
+            // 如果不是管理员，检查文章所有权
+            if !can_read_any {
+                if let Some(author_id) = state.post_service.get_post_author(post.id).await? {
+                    if author_id != user_id {
+                        return Err(ApiError::from(anyhow::anyhow!("您只能查看自己的文章")));
+                    }
+                }
+            }
+
+            post
+        }
+    };
+    Ok(Json(post_detail))
+}
+
+// 获取单篇已发布文章处理器（博客展示界面专用，支持游客和认证用户）
+pub async fn get_published_post_handler(
+    _optional_auth: OptionalAuth, // 使用可选认证，支持游客访问
     State(state): State<AppState>,
     Path(id_or_slug): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     // 尝试解析为UUID
     let post_detail = match Uuid::parse_str(&id_or_slug) {
-        Ok(id) => state.post_service.get_post_by_id(id).await?,
-        Err(_) => state.post_service.get_post_by_slug(&id_or_slug).await?,
+        Ok(id) => state.post_service.get_published_post_by_id(id).await?,
+        Err(_) => {
+            state
+                .post_service
+                .get_published_post_by_slug(&id_or_slug)
+                .await?
+        }
     };
     Ok(Json(post_detail))
 }
@@ -119,4 +228,68 @@ pub async fn delete_post_handler(
     // 无论是因为有超级权限还是因为是所有者，只要前面的授权检查通过，就执行删除
     state.post_service.delete_post(id).await?;
     Ok(StatusCode::NO_CONTENT) // 成功删除返回 204 NO CONTENT
+}
+
+// 发布文章处理器
+pub async fn publish_post_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查用户是否有发布任意文章的权限
+    let can_publish_any = auth_user.require_permission("post:publish:any").is_ok();
+
+    if can_publish_any {
+        // 如果有管理员权限，直接发布
+        tracing::info!("管理员 {} 正在发布文章 {}", user_id, id);
+    } else {
+        // 检查是否有发布自己文章的权限
+        auth_user.require_permission("post:publish:own")?;
+
+        // 验证文章所有权
+        let post_author = state.post_service.get_post_author(id).await?;
+        if post_author != Some(user_id) {
+            tracing::warn!("权限不足：用户 {} 尝试发布不属于自己的文章 {}", user_id, id);
+            return Err(ApiError::from(anyhow::anyhow!("您只能发布自己的文章")));
+        }
+        tracing::info!("用户 {} 正在发布自己的文章 {}", user_id, id);
+    }
+
+    // 执行发布操作
+    state.post_service.publish_post(id).await?;
+    Ok(Json(serde_json::json!({"message": "文章发布成功"})))
+}
+
+// 撤回文章处理器
+pub async fn unpublish_post_handler(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = auth_user.user_id();
+
+    // 检查用户是否有撤回任意文章的权限
+    let can_unpublish_any = auth_user.require_permission("post:unpublish:any").is_ok();
+
+    if can_unpublish_any {
+        // 如果有管理员权限，直接撤回
+        tracing::info!("管理员 {} 正在撤回文章 {}", user_id, id);
+    } else {
+        // 检查是否有撤回自己文章的权限
+        auth_user.require_permission("post:unpublish:own")?;
+
+        // 验证文章所有权
+        let post_author = state.post_service.get_post_author(id).await?;
+        if post_author != Some(user_id) {
+            tracing::warn!("权限不足：用户 {} 尝试撤回不属于自己的文章 {}", user_id, id);
+            return Err(ApiError::from(anyhow::anyhow!("您只能撤回自己的文章")));
+        }
+        tracing::info!("用户 {} 正在撤回自己的文章 {}", user_id, id);
+    }
+
+    // 执行撤回操作
+    state.post_service.unpublish_post(id).await?;
+    Ok(Json(serde_json::json!({"message": "文章撤回成功"})))
 }

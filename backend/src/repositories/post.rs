@@ -1,4 +1,6 @@
-use crate::dtos::post::{CategoryDto, CreatePostPayload, TagDto, UpdatePostPayload};
+use crate::dtos::post::{
+    CategoryDto, CreatePostPayload, DraftAccessLogDto, ShareDraftPayload, TagDto, UpdatePostPayload,
+};
 use crate::models::Post;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -19,6 +21,19 @@ pub trait PostRepository: Send + Sync {
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Post>>;
     async fn get_by_slug(&self, slug: &str) -> Result<Option<Post>>;
     async fn list(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)>;
+    // 新增：按作者ID过滤的文章列表
+    async fn list_by_author(
+        &self,
+        author_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)>;
+    // 新增：查询已发布的文章列表（公开接口）
+    async fn list_published(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)>;
+    // 新增：根据ID获取已发布的文章
+    async fn get_published_by_id(&self, id: Uuid) -> Result<Option<Post>>;
+    // 新增：根据slug获取已发布的文章
+    async fn get_published_by_slug(&self, slug: &str) -> Result<Option<Post>>;
 
     async fn update(
         &self,
@@ -29,6 +44,12 @@ pub trait PostRepository: Send + Sync {
 
     async fn delete(&self, id: Uuid) -> Result<()>;
 
+    // 新增：发布文章
+    async fn publish(&self, id: Uuid) -> Result<()>;
+
+    // 新增：撤回文章
+    async fn unpublish(&self, id: Uuid) -> Result<()>;
+
     // 获取帖子的完整分类和标签对象
     async fn get_categories_for_post(&self, post_id: Uuid) -> Result<Vec<CategoryDto>>;
     async fn get_tags_for_post(&self, post_id: Uuid) -> Result<Vec<TagDto>>;
@@ -36,9 +57,47 @@ pub trait PostRepository: Send + Sync {
     // 暂时不实现，但作为未来获取关联信息的占位
     // async fn get_category_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
     // async fn get_tag_ids_for_post(&self, post_id: Uuid, pool: &PgPool) -> Result<Vec<Uuid>>;
-    
+
     // 获取帖子的作者id
-    async fn get_author_id(&self,post_id: Uuid)->Result<Option<Uuid>>;
+    async fn get_author_id(&self, post_id: Uuid) -> Result<Option<Uuid>>;
+
+    // ================================
+    // 草稿权限和分享相关方法
+    // ================================
+
+    // 检查用户是否可以访问草稿
+    async fn can_access_draft(&self, post_id: Uuid, user_id: Uuid) -> Result<bool>;
+
+    // 分享草稿给指定用户
+    async fn share_draft(&self, post_id: Uuid, payload: &ShareDraftPayload) -> Result<()>;
+
+    // 获取用户可以访问的草稿列表（包括自己的和分享给自己的）
+    async fn list_accessible_drafts(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)>;
+
+    // 记录草稿访问日志
+    async fn log_draft_access(
+        &self,
+        post_id: Uuid,
+        accessed_by: Uuid,
+        access_type: &str,
+        reason: Option<&str>,
+    ) -> Result<()>;
+
+    // 获取草稿访问日志
+    async fn get_draft_access_logs(
+        &self,
+        post_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<DraftAccessLogDto>>;
+
+    // 检查文章是否为草稿
+    async fn is_draft(&self, post_id: Uuid) -> Result<bool>;
 }
 
 // Postgres的具体实现
@@ -137,13 +196,13 @@ impl PostRepository for PostgresPostRepository {
             .await
             .context("Failed to begin transaction for creating post")?;
 
-        // 1. 插入帖子基本信息
+        // 1. 插入帖子基本信息（包括草稿分享字段）
         let post = sqlx::query_as!(
             Post,
             r#"
-            insert into posts (id,slug,title,content,created_at,updated_at,published_at,author_id)
-            values ($1,$2,$3,$4,$5,$6,$7,$8)
-            returning id,slug,title,content,created_at,updated_at,published_at,author_id
+            insert into posts (id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public)
+            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            returning id,slug,title,content,created_at,updated_at,published_at,author_id,draft_shared_with,is_draft_public
             "#,
             post_id,
             slug,
@@ -152,7 +211,9 @@ impl PostRepository for PostgresPostRepository {
             now,
             now,
             None::<DateTime<Utc>>,
-            author_id
+            author_id,
+            payload.draft_shared_with.as_deref(),
+            payload.is_draft_public
         )
         .fetch_one(&mut *txn) // 在事务中执行
         .await
@@ -183,7 +244,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id from posts where id = $1
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public from posts where id = $1
             "#,
             id
         )
@@ -197,7 +258,7 @@ impl PostRepository for PostgresPostRepository {
         let post = sqlx::query_as!(
             Post,
             r#"
-            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public
             from posts 
             where slug = $1
             "#,
@@ -214,7 +275,7 @@ impl PostRepository for PostgresPostRepository {
         let posts = sqlx::query_as!(
             Post,
             r#"
-            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id 
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public 
             FROM posts 
             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 过滤已发布的
             ORDER BY created_at DESC -- 或者 ORDER BY published_at DESC
@@ -245,6 +306,115 @@ impl PostRepository for PostgresPostRepository {
         let total_items: i64 = total_count_result.count;
 
         Ok((posts, total_items))
+    }
+
+    async fn list_by_author(
+        &self,
+        author_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)> {
+        // --- 查询当前页的帖子列表,只返回指定作者的文章 ---
+        let posts = sqlx::query_as!(
+            Post,
+            r#"
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public 
+            FROM posts 
+            WHERE author_id = $1
+            -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 过滤已发布的
+            ORDER BY created_at DESC -- 或者 ORDER BY published_at DESC
+            limit $2 offset $3
+            "#,
+            author_id,
+            limit,
+            offset
+        )
+            .fetch_all(&self.pool)
+            .await
+            .context("查询指定作者的帖子列表分页数据失败")?;
+
+        // --- 查询指定作者的总帖子数 ---
+        let total_count_result = sqlx::query!(
+            r#"
+            select count(*) as "count!" from posts
+            WHERE author_id = $1
+             -- WHERE published_at IS NOT NULL AND published_at <= NOW() -- 同样需要过滤
+            "#,
+            author_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("查询指定作者的帖子总数失败")?;
+
+        let total_items: i64 = total_count_result.count;
+
+        Ok((posts, total_items))
+    }
+
+    async fn list_published(&self, limit: i64, offset: i64) -> Result<(Vec<Post>, i64)> {
+        // --- 查询已发布的文章列表 ---
+        let posts = sqlx::query_as!(
+            Post,
+            r#"
+            SELECT id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at, author_id,draft_shared_with,is_draft_public 
+            FROM posts 
+            WHERE published_at IS NOT NULL AND published_at <= NOW()
+            ORDER BY published_at DESC
+            limit $1 offset $2
+            "#,
+            limit,
+            offset
+        )
+            .fetch_all(&self.pool)
+            .await
+            .context("查询已发布文章列表分页数据失败")?;
+
+        // --- 查询已发布文章总数 ---
+        let total_count_result = sqlx::query!(
+            r#"
+            select count(*) as "count!" from posts
+            WHERE published_at IS NOT NULL AND published_at <= NOW()
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("查询已发布文章总数失败")?;
+
+        let total_items: i64 = total_count_result.count;
+
+        Ok((posts, total_items))
+    }
+
+    async fn get_published_by_id(&self, id: Uuid) -> Result<Option<Post>> {
+        let post = sqlx::query_as!(
+            Post,
+            r#"
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public 
+            from posts 
+            where id = $1 AND published_at IS NOT NULL AND published_at <= NOW()
+            "#,
+            id
+        )
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("按 id ({}) 查询已发布 Post 失败", id))?;
+        Ok(post)
+    }
+
+    async fn get_published_by_slug(&self, slug: &str) -> Result<Option<Post>> {
+        let post = sqlx::query_as!(
+            Post,
+            r#"
+            select id,slug,title,content,created_at as "created_at!",updated_at as "updated_at!",published_at,author_id,draft_shared_with,is_draft_public
+            from posts 
+            where slug = $1 AND published_at IS NOT NULL AND published_at <= NOW()
+            "#,
+            slug
+        )
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("按 slug ({}) 查询已发布 Post 失败", slug))?;
+        Ok(post)
     }
 
     async fn update(
@@ -294,20 +464,31 @@ impl PostRepository for PostgresPostRepository {
             published_at_to_update = current_post.published_at;
         }
 
-        // 2. 更新帖子基本信息
+        // 处理草稿分享字段
+        let draft_shared_with_to_update = payload
+            .draft_shared_with
+            .as_deref()
+            .unwrap_or(current_post.draft_shared_with.as_deref().unwrap_or(&[]));
+        let is_draft_public_to_update = payload
+            .is_draft_public
+            .unwrap_or(current_post.is_draft_public.unwrap_or(false));
+
+        // 2. 更新帖子基本信息（包括草稿分享字段）
         let updated_post_from_db = sqlx::query_as!(
             Post,
             r#"
             update posts
-            set title = $1,content = $2,slug = $3,updated_at = $4,published_at = $5
-            where id = $6
-            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id
+            set title = $1,content = $2,slug = $3,updated_at = $4,published_at = $5,draft_shared_with = $6,is_draft_public = $7
+            where id = $8
+            returning id, slug, title, content, created_at AS "created_at!", updated_at AS "updated_at!", published_at,author_id,draft_shared_with,is_draft_public
             "#,
             title_to_update,
             content_to_update,
             slug_to_update,
             now,
             published_at_to_update,
+            draft_shared_with_to_update,
+            is_draft_public_to_update,
             id
         )
             .fetch_one(&mut *txn)
@@ -399,13 +580,305 @@ impl PostRepository for PostgresPostRepository {
     }
 
     async fn get_author_id(&self, post_id: Uuid) -> Result<Option<Uuid>> {
-        let result = sqlx::query!(
-            "select author_id from posts where id = $1",
-            post_id
-        )
+        let result = sqlx::query!("select author_id from posts where id = $1", post_id)
             .fetch_optional(&self.pool)
             .await
-            .context(format!("从数据库获取 Post id 为 {} 的 author id失败",post_id))?;
+            .context(format!(
+                "从数据库获取 Post id 为 {} 的 author id失败",
+                post_id
+            ))?;
         Ok(result.and_then(|record| record.author_id))
+    }
+
+    // 新增：发布文章
+    async fn publish(&self, id: Uuid) -> Result<()> {
+        let now = Utc::now();
+        let result = sqlx::query!(
+            "UPDATE posts SET published_at = $1, updated_at = $1 WHERE id = $2",
+            now,
+            id
+        )
+        .execute(&self.pool)
+        .await
+        .context(format!("发布文章 (id: {}) 失败", id))?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("尝试发布文章 (id: {}) 时未找到记录", id);
+        }
+
+        tracing::info!("文章 {} 已发布", id);
+        Ok(())
+    }
+
+    // 新增：撤回文章
+    async fn unpublish(&self, id: Uuid) -> Result<()> {
+        let now = Utc::now();
+        let result = sqlx::query!(
+            "UPDATE posts SET published_at = NULL, updated_at = $1 WHERE id = $2",
+            now,
+            id
+        )
+        .execute(&self.pool)
+        .await
+        .context(format!("撤回文章 (id: {}) 失败", id))?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("尝试撤回文章 (id: {}) 时未找到记录", id);
+        }
+
+        tracing::info!("文章 {} 已撤回", id);
+        Ok(())
+    }
+
+    // 检查用户是否可以访问草稿
+    async fn can_access_draft(&self, post_id: Uuid, user_id: Uuid) -> Result<bool> {
+        let result = sqlx::query!(
+            r#"
+            SELECT 
+                author_id,
+                draft_shared_with,
+                is_draft_public,
+                published_at
+            FROM posts 
+            WHERE id = $1
+            "#,
+            post_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(format!("检查草稿访问权限失败，post_id: {}", post_id))?;
+
+        let Some(post) = result else {
+            return Ok(false); // 文章不存在
+        };
+
+        // 如果文章已发布，那么不是草稿，任何人都可以访问
+        if post.published_at.is_some() {
+            return Ok(true);
+        }
+
+        // 1. 如果是作者本人，直接允许访问
+        if post.author_id == Some(user_id) {
+            return Ok(true);
+        }
+
+        // 2. 检查是否被分享给该用户
+        if let Some(shared_users) = post.draft_shared_with {
+            if shared_users.contains(&user_id) {
+                return Ok(true);
+            }
+        }
+
+        // 3. 检查是否设为公开（这个需要结合用户权限检查）
+        if post.is_draft_public == Some(true) {
+            // 这里返回true，但上层应该结合用户的 post:draft:access_shared 权限检查
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    // 分享草稿给指定用户
+    async fn share_draft(&self, post_id: Uuid, payload: &ShareDraftPayload) -> Result<()> {
+        // 首先检查文章是否存在且为草稿
+        let is_draft = self.is_draft(post_id).await?;
+        if !is_draft {
+            anyhow::bail!("只能分享草稿文章");
+        }
+
+        let result = sqlx::query!(
+            r#"
+            UPDATE posts 
+            SET 
+                draft_shared_with = $1,
+                is_draft_public = $2,
+                updated_at = $3
+            WHERE id = $4 AND published_at IS NULL
+            "#,
+            &payload.shared_with,
+            payload.is_public,
+            Utc::now(),
+            post_id
+        )
+        .execute(&self.pool)
+        .await
+        .context(format!("分享草稿失败，post_id: {}", post_id))?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!("草稿分享失败：文章不存在或已发布");
+        }
+
+        tracing::info!(
+            "草稿 {} 已分享给 {} 个用户",
+            post_id,
+            payload.shared_with.len()
+        );
+        Ok(())
+    }
+
+    // 获取用户可以访问的草稿列表（包括自己的和分享给自己的）
+    async fn list_accessible_drafts(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Post>, i64)> {
+        // 查询用户可以访问的草稿：
+        // 1. 自己创建的草稿
+        // 2. 分享给自己的草稿
+        // 3. 公开的草稿（如果用户有相应权限，这个在上层检查）
+        let posts = sqlx::query_as!(
+            Post,
+            r#"
+            SELECT 
+                id, slug, title, content, author_id, created_at, updated_at, published_at,
+                draft_shared_with, is_draft_public
+            FROM posts 
+            WHERE published_at IS NULL 
+            AND (
+                author_id = $1  -- 自己的草稿
+                OR $1 = ANY(draft_shared_with)  -- 分享给自己的草稿
+                OR (is_draft_public = true)  -- 公开的草稿
+            )
+            ORDER BY updated_at DESC
+            LIMIT $2 OFFSET $3
+            "#,
+            user_id,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("获取用户可访问的草稿列表失败")?;
+
+        // 获取总数
+        let total = sqlx::query!(
+            r#"
+            SELECT COUNT(*) as count
+            FROM posts 
+            WHERE published_at IS NULL 
+            AND (
+                author_id = $1  
+                OR $1 = ANY(draft_shared_with)  
+                OR (is_draft_public = true)
+            )
+            "#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("获取用户可访问的草稿总数失败")?;
+
+        Ok((posts, total.count.unwrap_or(0)))
+    }
+
+    // 记录草稿访问日志
+    async fn log_draft_access(
+        &self,
+        post_id: Uuid,
+        accessed_by: Uuid,
+        access_type: &str,
+        reason: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO draft_access_logs (post_id, accessed_by, access_type, access_reason)
+            VALUES ($1, $2, $3, $4)
+            "#,
+            post_id,
+            accessed_by,
+            access_type,
+            reason
+        )
+        .execute(&self.pool)
+        .await
+        .context("记录草稿访问日志失败")?;
+
+        tracing::info!(
+            "记录草稿访问日志：用户 {} {} 了草稿 {}",
+            accessed_by,
+            access_type,
+            post_id
+        );
+        Ok(())
+    }
+
+    // 获取草稿访问日志
+    async fn get_draft_access_logs(
+        &self,
+        post_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<DraftAccessLogDto>> {
+        let logs = if let Some(post_id) = post_id {
+            // 获取特定文章的访问日志
+            sqlx::query_as!(
+                DraftAccessLogDto,
+                r#"
+                SELECT 
+                    dal.id,
+                    dal.post_id,
+                    p.title as post_title,
+                    dal.accessed_by,
+                    u.username as accessed_by_username,
+                    dal.access_type,
+                    dal.access_reason,
+                    dal.created_at
+                FROM draft_access_logs dal
+                JOIN posts p ON dal.post_id = p.id
+                JOIN users u ON dal.accessed_by = u.id
+                WHERE dal.post_id = $1
+                ORDER BY dal.created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+                post_id,
+                limit,
+                offset
+            )
+            .fetch_all(&self.pool)
+            .await
+            .context("获取特定文章的草稿访问日志失败")?
+        } else {
+            // 获取所有草稿访问日志
+            sqlx::query_as!(
+                DraftAccessLogDto,
+                r#"
+                SELECT 
+                    dal.id,
+                    dal.post_id,
+                    p.title as post_title,
+                    dal.accessed_by,
+                    u.username as accessed_by_username,
+                    dal.access_type,
+                    dal.access_reason,
+                    dal.created_at
+                FROM draft_access_logs dal
+                JOIN posts p ON dal.post_id = p.id
+                JOIN users u ON dal.accessed_by = u.id
+                ORDER BY dal.created_at DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                limit,
+                offset
+            )
+            .fetch_all(&self.pool)
+            .await
+            .context("获取草稿访问日志失败")?
+        };
+
+        Ok(logs)
+    }
+
+    // 检查文章是否为草稿
+    async fn is_draft(&self, post_id: Uuid) -> Result<bool> {
+        let result = sqlx::query!("SELECT published_at FROM posts WHERE id = $1", post_id)
+            .fetch_optional(&self.pool)
+            .await
+            .context(format!("检查文章是否为草稿失败，post_id: {}", post_id))?;
+
+        match result {
+            Some(record) => Ok(record.published_at.is_none()),
+            None => anyhow::bail!("文章不存在"),
+        }
     }
 }

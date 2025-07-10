@@ -1,8 +1,9 @@
-use crate::dtos::post::{CreatePostPayload, PostDetailDto, UpdatePostPayload};
+use crate::dtos::post::{CategoryDto, CreatePostPayload, PostDetailDto, TagDto, UpdatePostPayload};
 use crate::dtos::{PaginatedResponse, Pagination};
+use crate::models::Post;
 use crate::repositories::{CategoryRepository, PostRepository, TagRepository};
 use crate::utils::markdown_to_html_safe;
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::{Context, Ok, Result, anyhow};
 use slug::slugify;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -25,6 +26,57 @@ impl PostService {
             repo,
             category_repo,
             tag_repo,
+        }
+    }
+
+    // 辅助函数：创建PostDetailDto，统一处理草稿分享字段
+    fn create_post_detail_dto(
+        post: &Post,
+        categories: Vec<CategoryDto>,
+        tags: Vec<TagDto>,
+        rendered_html: String,
+        accessing_user_id: Option<Uuid>,
+    ) -> PostDetailDto {
+        // 判断是否在访问他人的草稿
+        let is_accessing_others_draft = if post.published_at.is_some() {
+            // 已发布文章，不是草稿
+            None
+        } else if let Some(user_id) = accessing_user_id {
+            // 草稿状态，检查是否为作者本人
+            Some(post.author_id != Some(user_id))
+        } else {
+            // 未提供用户ID，无法判断
+            None
+        };
+
+        PostDetailDto {
+            id: post.id,
+            slug: post.slug.clone(),
+            title: post.title.clone(),
+            content_markdown: post.content.clone(),
+            content_html: rendered_html,
+            author_id: post.author_id, // 设置作者ID
+            created_at: post.created_at,
+            updated_at: post.updated_at,
+            published_at: post.published_at,
+            categories: if categories.is_empty() {
+                None
+            } else {
+                Some(categories)
+            },
+            tags: if tags.is_empty() { None } else { Some(tags) },
+            // 草稿分享相关字段（仅对草稿显示）
+            draft_shared_with: if post.published_at.is_none() {
+                post.draft_shared_with.clone()
+            } else {
+                None
+            },
+            is_draft_public: if post.published_at.is_none() {
+                post.is_draft_public
+            } else {
+                None
+            },
+            is_accessing_others_draft,
         }
     }
 
@@ -103,22 +155,13 @@ impl PostService {
         // markdown转换
         let rendered_html = markdown_to_html_safe(&created_post_basic.content);
 
-        let post_detail_dto = PostDetailDto {
-            id: created_post_basic.id,
-            slug: created_post_basic.slug,
-            title: created_post_basic.title,
-            content_markdown: created_post_basic.content,
-            content_html: rendered_html,
-            created_at: created_post_basic.created_at,
-            updated_at: created_post_basic.updated_at,
-            published_at: created_post_basic.published_at,
-            categories: if categories.is_empty() {
-                None
-            } else {
-                Some(categories)
-            },
-            tags: if tags.is_empty() { None } else { Some(tags) },
-        };
+        let post_detail_dto = Self::create_post_detail_dto(
+            &created_post_basic,
+            categories,
+            tags,
+            rendered_html,
+            Some(author_id), // 创建者查看自己的文章
+        );
         Ok(post_detail_dto)
     }
 
@@ -146,22 +189,13 @@ impl PostService {
             .await
             .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
 
-        let post_detail_dto = PostDetailDto {
-            id: post.id,
-            slug: post.slug,
-            title: post.title,
-            content_markdown: post.content,
-            content_html: rendered_html,
-            created_at: post.created_at,
-            updated_at: post.updated_at,
-            published_at: post.published_at,
-            categories: if categories.is_empty() {
-                None
-            } else {
-                Some(categories)
-            },
-            tags: if tags.is_empty() { None } else { Some(tags) },
-        };
+        let post_detail_dto = Self::create_post_detail_dto(
+            &post,
+            categories,
+            tags,
+            rendered_html,
+            None, // 这里需要调用方传入用户ID来确定是否访问他人草稿
+        );
         Ok(post_detail_dto)
     }
 
@@ -189,22 +223,8 @@ impl PostService {
             .await
             .context(format!("获取新创建帖子 {} 的标签失败", post.id))?;
 
-        let post_detail_dto = PostDetailDto {
-            id: post.id,
-            slug: post.slug,
-            title: post.title,
-            content_markdown: post.content,
-            content_html: rendered_html,
-            created_at: post.created_at,
-            updated_at: post.updated_at,
-            published_at: post.published_at,
-            categories: if categories.is_empty() {
-                None
-            } else {
-                Some(categories)
-            },
-            tags: if tags.is_empty() { None } else { Some(tags) },
-        };
+        let post_detail_dto =
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
         Ok(post_detail_dto)
     }
 
@@ -244,28 +264,175 @@ impl PostService {
             // markdown转换
             let rendered_html = markdown_to_html_safe(&post.content);
 
-            let post_detail_dto = PostDetailDto {
-                id: post.id,
-                slug: post.slug,
-                title: post.title,
-                content_markdown: post.content,
-                content_html: rendered_html,
-                created_at: post.created_at,
-                updated_at: post.updated_at,
-                published_at: post.published_at,
-                categories: if categories.is_empty() {
-                    None
-                } else {
-                    Some(categories)
-                },
-                tags: if tags.is_empty() { None } else { Some(tags) },
-            };
+            let post_detail_dto =
+                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
             post_details_list.push(post_detail_dto);
         }
 
         let response = PaginatedResponse::new(post_details_list, total_items, page, page_size);
 
         Ok(response)
+    }
+
+    // 新增：根据权限获取文章列表
+    // 管理员可以看到所有文章，普通用户只能看到自己的文章
+    pub async fn list_posts_with_permission(
+        &self,
+        pagination: Pagination,
+        user_id: Uuid,
+        can_read_any: bool,
+    ) -> Result<PaginatedResponse<PostDetailDto>> {
+        // 从 Pagination DTO 获取验证过的分页参数
+        let limit = pagination.limit();
+        let offset = pagination.offset();
+        let page = pagination.page();
+        let page_size = pagination.page_size();
+
+        // 根据权限决定查询范围
+        let (posts, total_items) = if can_read_any {
+            // 管理员权限：查看所有文章
+            self.repo
+                .list(limit, offset)
+                .await
+                .context("Service 未能获取分页的帖子列表(管理员视图)")?
+        } else {
+            // 普通用户权限：只查看自己的文章
+            self.repo
+                .list_by_author(user_id, limit, offset)
+                .await
+                .context("Service 未能获取用户自己的帖子列表")?
+        };
+
+        // 2. 为每个帖子获取其关联的分类和标签 (N+1 查询问题警告)
+        let mut post_details_list = Vec::with_capacity(posts.len());
+
+        for post in posts {
+            let categories = self
+                .repo
+                .get_categories_for_post(post.id)
+                .await
+                .context(format!("获取帖子 {} 的分类失败", post.id))?;
+            let tags = self
+                .repo
+                .get_tags_for_post(post.id)
+                .await
+                .context(format!("获取帖子 {} 的标签失败", post.id))?;
+
+            // markdown转换
+            let rendered_html = markdown_to_html_safe(&post.content);
+
+            let post_detail_dto =
+                Self::create_post_detail_dto(&post, categories, tags, rendered_html, Some(user_id));
+            post_details_list.push(post_detail_dto);
+        }
+
+        let response = PaginatedResponse::new(post_details_list, total_items, page, page_size);
+
+        Ok(response)
+    }
+
+    // 获取已发布文章列表（博客展示界面专用）
+    pub async fn list_published_posts(
+        &self,
+        pagination: Pagination,
+    ) -> Result<PaginatedResponse<PostDetailDto>> {
+        // 从 Pagination DTO 获取验证过的分页参数
+        let limit = pagination.limit();
+        let offset = pagination.offset();
+        let page = pagination.page();
+        let page_size = pagination.page_size();
+
+        // 获取已发布的文章列表
+        let (posts, total_items) = self
+            .repo
+            .list_published(limit, offset)
+            .await
+            .context("Service 未能获取已发布文章列表")?;
+
+        // 为每个帖子获取其关联的分类和标签
+        let mut post_details_list = Vec::with_capacity(posts.len());
+
+        for post in posts {
+            let categories = self
+                .repo
+                .get_categories_for_post(post.id)
+                .await
+                .context(format!("获取文章 {} 的分类失败", post.id))?;
+            let tags = self
+                .repo
+                .get_tags_for_post(post.id)
+                .await
+                .context(format!("获取文章 {} 的标签失败", post.id))?;
+
+            // markdown转换
+            let rendered_html = markdown_to_html_safe(&post.content);
+
+            let post_detail_dto =
+                Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+            post_details_list.push(post_detail_dto);
+        }
+
+        let response = PaginatedResponse::new(post_details_list, total_items, page, page_size);
+        Ok(response)
+    }
+
+    // 根据ID获取已发布文章（博客展示界面专用）
+    pub async fn get_published_post_by_id(&self, id: Uuid) -> Result<PostDetailDto> {
+        let post = self
+            .repo
+            .get_published_by_id(id)
+            .await
+            .context(format!("Service未能通过id: ({})获取已发布文章基本信息", id))?
+            .ok_or_else(|| anyhow!("未找到 ID 为 {} 的已发布文章", id))?;
+
+        // Markdown 转换
+        let rendered_html = markdown_to_html_safe(&post.content);
+
+        let categories = self
+            .repo
+            .get_categories_for_post(post.id)
+            .await
+            .context(format!("获取已发布文章 {} 的分类失败", post.id))?;
+        let tags = self
+            .repo
+            .get_tags_for_post(post.id)
+            .await
+            .context(format!("获取已发布文章 {} 的标签失败", post.id))?;
+
+        let post_detail_dto =
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+        Ok(post_detail_dto)
+    }
+
+    // 根据slug获取已发布文章（博客展示界面专用）
+    pub async fn get_published_post_by_slug(&self, slug: &str) -> Result<PostDetailDto> {
+        let post = self
+            .repo
+            .get_published_by_slug(slug)
+            .await
+            .context(format!(
+                "Service未能通过 slug ({}) 获取已发布文章基本信息",
+                slug
+            ))?
+            .ok_or_else(|| anyhow!("未找到 slug 为 '{}' 的已发布文章", slug))?;
+
+        // Markdown 转换
+        let rendered_html = markdown_to_html_safe(&post.content);
+
+        let categories = self
+            .repo
+            .get_categories_for_post(post.id)
+            .await
+            .context(format!("获取已发布文章 {} 的分类失败", post.id))?;
+        let tags = self
+            .repo
+            .get_tags_for_post(post.id)
+            .await
+            .context(format!("获取已发布文章 {} 的标签失败", post.id))?;
+
+        let post_detail_dto =
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
+        Ok(post_detail_dto)
     }
 
     // 更新帖子，并返回包含完整关联信息的 PostDetailDto
@@ -317,23 +484,8 @@ impl PostService {
             .await
             .context(format!("获取更新后帖子 {} 的标签失败", post.id))?;
 
-        let post_detail_dto = PostDetailDto {
-            id: post.id,
-            slug: post.slug,
-            title: post.title,
-            content_markdown: post.content,
-            content_html: rendered_html,
-            created_at: post.created_at,
-            updated_at: post.created_at,
-            published_at: post.published_at,
-            categories: if categories.is_empty() {
-                None
-            } else {
-                Some(categories)
-            },
-            tags: if tags.is_empty() { None } else { Some(tags) },
-        };
-
+        let post_detail_dto =
+            Self::create_post_detail_dto(&post, categories, tags, rendered_html, None);
         Ok(post_detail_dto)
     }
 
@@ -350,5 +502,21 @@ impl PostService {
             .get_author_id(post_id)
             .await
             .context("Service层获取作者ID失败")
+    }
+
+    // 发布文章
+    pub async fn publish_post(&self, id: Uuid) -> Result<()> {
+        self.repo
+            .publish(id)
+            .await
+            .context(format!("Service层发布文章 (id: {}) 失败", id))
+    }
+
+    // 撤回文章
+    pub async fn unpublish_post(&self, id: Uuid) -> Result<()> {
+        self.repo
+            .unpublish(id)
+            .await
+            .context(format!("Service层撤回文章 (id: {}) 失败", id))
     }
 }

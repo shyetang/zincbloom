@@ -1,7 +1,7 @@
-use crate::dtos::{CreateTagPayload, UpdateTagPayload};
+use crate::dtos::tag::{CreateTagPayload, UpdateTagPayload};
 use crate::models::Tag;
 use crate::repositories::TagRepository;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use slug::slugify;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -140,4 +140,195 @@ impl TagService {
             .await
             .context(format!("Service 未能删除标签 (ID: {})", id))
     }
+
+    // === 管理员专用功能 ===
+
+    /// 合并标签：将多个标签合并为一个目标标签
+    /// 所有被合并标签的文章关联将转移到目标标签
+    pub async fn merge_tags(&self, target_tag_id: Uuid, source_tag_ids: &[Uuid]) -> Result<Tag> {
+        // 1. 验证目标标签存在
+        let target_tag = self
+            .get_tag_by_id(target_tag_id)
+            .await
+            .context("合并操作：目标标签不存在")?;
+
+        // 2. 验证源标签都存在且不包含目标标签
+        for &source_id in source_tag_ids {
+            if source_id == target_tag_id {
+                return Err(anyhow!("不能将标签合并到自身"));
+            }
+            self.get_tag_by_id(source_id)
+                .await
+                .context(format!("合并操作：源标签 {} 不存在", source_id))?;
+        }
+
+        // 3. 调用仓库进行合并操作
+        self.repo
+            .merge_tags(target_tag_id, source_tag_ids)
+            .await
+            .context("标签合并操作失败")?;
+
+        Ok(target_tag)
+    }
+
+    /// 增强版标签合并：提供详细的操作结果
+    pub async fn merge_tags_enhanced(
+        &self,
+        target_tag_id: Uuid,
+        source_tag_ids: &[Uuid],
+        new_target_name: Option<&str>,
+    ) -> Result<crate::dtos::tag::MergeTagsResponse> {
+        // 1. 验证目标标签存在
+        let mut target_tag = self
+            .get_tag_by_id(target_tag_id)
+            .await
+            .context("合并操作：目标标签不存在")?;
+
+        // 2. 验证源标签都存在且不包含目标标签
+        let mut source_tags = Vec::new();
+        for &source_id in source_tag_ids {
+            if source_id == target_tag_id {
+                return Err(anyhow!("不能将标签合并到自身"));
+            }
+            let source_tag = self
+                .get_tag_by_id(source_id)
+                .await
+                .context(format!("合并操作：源标签 {} 不存在", source_id))?;
+            source_tags.push(source_tag);
+        }
+
+        // 3. 执行增强合并操作
+        let (affected_post_count, merged_tag_count, duplicate_relations_removed) = self
+            .repo
+            .merge_tags_enhanced(target_tag_id, source_tag_ids, new_target_name)
+            .await
+            .context("增强标签合并操作失败")?;
+
+        // 4. 如果更新了目标标签名称，重新获取
+        if new_target_name.is_some() {
+            target_tag = self.get_tag_by_id(target_tag_id).await?;
+        }
+
+        // 5. 生成操作摘要
+        let source_names: Vec<String> = source_tags.iter().map(|t| t.name.clone()).collect();
+        let operation_summary = format!(
+            "成功将 {} 个标签({}) 合并到 '{}'，影响了 {} 篇文章，移除了 {} 个重复关联",
+            merged_tag_count,
+            source_names.join(", "),
+            target_tag.name,
+            affected_post_count,
+            duplicate_relations_removed
+        );
+
+        Ok(crate::dtos::tag::MergeTagsResponse {
+            target_tag,
+            merged_tag_count,
+            affected_post_count,
+            duplicate_relations_removed,
+            operation_summary,
+        })
+    }
+
+    /// 获取标签合并预览
+    pub async fn get_merge_preview(
+        &self,
+        target_tag_id: Uuid,
+        source_tag_ids: &[Uuid],
+    ) -> Result<crate::dtos::tag::MergeTagsPreviewResponse> {
+        // 1. 获取预览数据
+        let (all_tags, total_posts_affected, posts_with_duplicates) = self
+            .repo
+            .get_merge_preview(target_tag_id, source_tag_ids)
+            .await?;
+
+        // 2. 分离目标标签和源标签
+        let target_tag = all_tags
+            .iter()
+            .find(|t| t.id == target_tag_id)
+            .ok_or_else(|| anyhow!("目标标签不存在"))?
+            .clone();
+
+        let source_tags: Vec<_> = all_tags
+            .iter()
+            .filter(|t| source_tag_ids.contains(&t.id))
+            .cloned()
+            .collect();
+
+        // 3. 获取每个标签的文章统计
+        let mut posts_by_tag = Vec::new();
+        for tag in &all_tags {
+            let (post_count, sample_titles) = self.repo.get_tag_post_info(tag.id).await?;
+            posts_by_tag.push(crate::dtos::tag::TagPostCount {
+                tag: tag.clone(),
+                post_count,
+                sample_post_titles: sample_titles,
+            });
+        }
+
+        // 4. 生成潜在问题提醒
+        let mut potential_issues = Vec::new();
+
+        if posts_with_duplicates > 0 {
+            potential_issues.push(format!(
+                "有 {} 篇文章同时拥有目标标签和源标签，合并后将移除重复关联",
+                posts_with_duplicates
+            ));
+        }
+
+        if source_tags.is_empty() {
+            potential_issues.push("没有找到有效的源标签".to_string());
+        }
+
+        let high_usage_tags: Vec<_> = posts_by_tag
+            .iter()
+            .filter(|tpc| tpc.post_count > 50)
+            .map(|tpc| tpc.tag.name.clone())
+            .collect();
+
+        if !high_usage_tags.is_empty() {
+            potential_issues.push(format!(
+                "以下标签使用频率较高，请谨慎合并：{}",
+                high_usage_tags.join(", ")
+            ));
+        }
+
+        Ok(crate::dtos::tag::MergeTagsPreviewResponse {
+            target_tag,
+            source_tags,
+            total_posts_affected,
+            posts_with_duplicates,
+            posts_by_tag,
+            potential_issues,
+        })
+    }
+
+    /// 批量删除标签
+    pub async fn batch_delete_tags(&self, tag_ids: &[Uuid]) -> Result<usize> {
+        let deleted_count = self
+            .repo
+            .batch_delete(tag_ids)
+            .await
+            .context("批量删除标签失败")?;
+
+        Ok(deleted_count)
+    }
+
+    /// 获取标签使用统计（包含多少篇文章）
+    pub async fn get_tag_usage_stats(&self) -> Result<Vec<TagUsageStats>> {
+        self.repo
+            .get_usage_stats()
+            .await
+            .context("获取标签使用统计失败")
+    }
+
+    /// 查找重复或相似的标签（用于清理建议）
+    pub async fn find_similar_tags(&self) -> Result<Vec<SimilarTagGroup>> {
+        self.repo
+            .find_similar_tags()
+            .await
+            .context("查找相似标签失败")
+    }
 }
+
+// 重新导出类型以保持API简洁
+pub use crate::repositories::tag::{SimilarTagGroup, TagUsageStats};

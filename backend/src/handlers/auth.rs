@@ -1,6 +1,7 @@
 use crate::api_error::ApiError;
+use crate::dtos::admin::{UserLoginPayload, UserRegistrationPayload};
 use crate::dtos::auth::{ForgotPasswordPayload, ResetPasswordPayload, VerifyEmailPayload};
-use crate::dtos::{LoginResponsePayload, RefreshTokenPayload, UserLoginPayload, UserRegistrationPayload};
+use crate::dtos::auth::{LoginResponsePayload, RefreshTokenPayload};
 use crate::handlers::AppState;
 use anyhow::Result;
 use axum::response::IntoResponse;
@@ -80,7 +81,10 @@ pub async fn forgot_password_handler(
     State(state): State<AppState>,
     Json(payload): Json<ForgotPasswordPayload>,
 ) -> Result<impl IntoResponse, ApiError> {
-    state.auth_service.request_password_reset(&payload.email).await?;
+    state
+        .auth_service
+        .request_password_reset(&payload.email)
+        .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

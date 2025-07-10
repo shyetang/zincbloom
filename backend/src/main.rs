@@ -14,16 +14,18 @@ use backend::services::{
 };
 use sqlx::PgPool;
 use std::sync::Arc;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // ---- 初始化日志 ----
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "into".into()))
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_timer(
+            tracing_subscriber::fmt::time::OffsetTime::local_rfc_3339().expect("获取本地时区失败"),
+        ))
         .init();
 
     // 加载配置
