@@ -1,4 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+// import path from "node:path";
 export default defineNuxtConfig({
     compatibilityDate: "2025-05-15",
     devtools: { enabled: true },
@@ -52,9 +54,9 @@ export default defineNuxtConfig({
     },
 
     // 路径别名配置
-    alias: {
-        "@shared": "../shared",
-    },
+    // alias: {
+    //     "@shared": path.resolve(__dirname, "../shared"),
+    // },
 
     // 构建配置
     nitro: {
