@@ -80,3 +80,11 @@ lerna-debug.log*
 
 *.md
 *.backup
+
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
