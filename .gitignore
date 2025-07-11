@@ -88,3 +88,4 @@ lerna-debug.log*
 .nitro
 .cache
 dist
+.claude
