@@ -38,7 +38,7 @@
     <UProgress
       v-if="$route.meta.showProgress !== false"
       :model-value="isLoading ? 30 : 100"
-      class="fixed top-0 left-0 right-0 z-50 h-1"
+      class="fixed top-0 left-0 right-0 z-60 h-1"
       color="primary"
     />
   </div>

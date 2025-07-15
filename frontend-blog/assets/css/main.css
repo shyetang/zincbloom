@@ -130,3 +130,572 @@ a {
         padding-right: 2rem;
     }
 }
+
+/* 现代化设计强制样式 */
+.modern-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 50%, #f3e8ff 100%);
+}
+
+.dark .modern-hero {
+    background: linear-gradient(135deg, #1e293b 0%, #1e3a8a 50%, #581c87 100%);
+}
+
+.modern-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.15) 1px, transparent 0);
+    background-size: 75px 75px;
+    mask-image: linear-gradient(0deg, white, rgba(255,255,255,0.6));
+}
+
+.dark .modern-hero::before {
+    background-image: radial-gradient(circle at 1px 1px, rgba(51, 65, 85, 0.25) 1px, transparent 0);
+    mask-image: linear-gradient(0deg, rgba(255,255,255,0.1), rgba(255,255,255,0.5));
+}
+
+.modern-card {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    transition: all 0.3s ease;
+}
+
+.dark .modern-card {
+    background: #1e293b;
+    border-color: rgba(51, 65, 85, 0.7);
+}
+
+.modern-card:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.dark .modern-card:hover {
+    border-color: rgba(51, 65, 85, 0.6);
+}
+
+.modern-gradient-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.modern-text-gradient {
+    background: linear-gradient(45deg, #3b82f6, #8b5cf6, #6366f1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+.modern-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.modern-button-primary {
+    background: #1e293b;
+    color: white;
+}
+
+.modern-button-primary:hover {
+    background: #334155;
+    transform: translateY(-1px);
+}
+
+.modern-button-secondary {
+    background: white;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+}
+
+.modern-button-secondary:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+}
+
+.dark .modern-button-primary {
+    background: #3b82f6;
+}
+
+.dark .modern-button-primary:hover {
+    background: #2563eb;
+}
+
+.dark .modern-button-secondary {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+.dark .modern-button-secondary:hover {
+    background: #334155;
+}
+
+/* 现代化内容区域 */
+.modern-content-section {
+    position: relative;
+    padding: 4rem 0;
+    background: white;
+    border-radius: 1.5rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.dark .modern-content-section {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.modern-content-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #6366f1);
+    border-radius: 1.5rem 1.5rem 0 0;
+}
+
+.modern-section-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    padding: 0 2rem;
+}
+
+.modern-section-title {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+}
+
+.dark .modern-section-title {
+    color: white;
+}
+
+.modern-section-subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin: 0.5rem 0 0 0;
+}
+
+.dark .modern-section-subtitle {
+    color: #cbd5e1;
+}
+
+.modern-grid-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 0 2rem;
+}
+
+.modern-post-card {
+    background: #f8fafc;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.dark .modern-post-card {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(51, 65, 85, 0.7);
+    backdrop-filter: blur(10px);
+}
+
+.modern-post-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border-color: #3b82f6;
+}
+
+.modern-post-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.modern-post-card:hover::before {
+    transform: scaleX(1);
+}
+
+/* 现代化侧边栏 */
+.modern-sidebar {
+    position: sticky;
+    top: 6rem;
+    height: fit-content;
+}
+
+.modern-sidebar-card {
+    background: white;
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.dark .modern-sidebar-card {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border-color: rgba(51, 65, 85, 0.7);
+}
+
+.modern-sidebar-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.modern-sidebar-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    border-radius: 1.5rem 1.5rem 0 0;
+}
+
+.modern-sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.modern-sidebar-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.dark .modern-sidebar-title {
+    color: white;
+}
+
+/* 现代化特色区域 */
+.modern-features-section {
+    position: relative;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    padding: 6rem 0;
+    margin-top: 4rem;
+}
+
+.dark .modern-features-section {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.modern-features-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.1) 1px, transparent 0);
+    background-size: 60px 60px;
+    opacity: 0.5;
+}
+
+.modern-feature-card {
+    text-align: center;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 1.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.dark .modern-feature-card {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: rgba(51, 65, 85, 0.7);
+}
+
+.modern-feature-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modern-feature-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 1rem;
+    margin: 0 auto 1.5rem;
+    box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+    transition: all 0.3s ease;
+}
+
+.modern-feature-card:hover .modern-feature-icon {
+    transform: scale(1.1);
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.4);
+}
+
+/* 现代化导航栏 */
+.modern-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+/* 强制导航栏一行显示 */
+.modern-header nav > div {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    height: 4rem !important;
+    overflow: hidden !important;
+}
+
+.modern-header nav > div > * {
+    flex-shrink: 0 !important;
+}
+
+.dark .modern-header {
+    background: rgba(30, 41, 59, 0.95);
+    border-bottom-color: rgba(51, 65, 85, 0.6);
+}
+
+.modern-header:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.modern-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+    text-decoration: none;
+    color: #1e293b;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.dark .modern-logo {
+    color: white;
+}
+
+.modern-logo:hover {
+    transform: translateY(-1px);
+}
+
+.modern-logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+    transition: all 0.3s ease;
+}
+
+.modern-logo:hover .modern-logo-icon {
+    transform: rotate(5deg) scale(1.05);
+    box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4);
+}
+
+.modern-nav-link {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    position: relative;
+    color: #64748b;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.dark .modern-nav-link {
+    color: #cbd5e1;
+}
+
+.modern-nav-link:hover {
+    color: #1e293b;
+    background: rgba(248, 250, 252, 0.8);
+    transform: translateY(-1px);
+}
+
+.dark .modern-nav-link:hover {
+    color: white;
+    background: rgba(51, 65, 85, 0.8);
+}
+
+.modern-nav-link.active {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    font-weight: 600;
+}
+
+.modern-nav-link.active::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    background: #3b82f6;
+    border-radius: 50%;
+}
+
+.modern-search-input {
+    width: 10rem;
+    min-width: 10rem;
+    background: rgba(248, 250, 252, 0.8);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem 0.5rem 2.5rem;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.dark .modern-search-input {
+    background: rgba(51, 65, 85, 0.8);
+    border-color: rgba(71, 85, 105, 0.6);
+    color: white;
+}
+
+.modern-search-input:focus {
+    width: 12rem;
+    background: white;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.dark .modern-search-input:focus {
+    background: #334155;
+}
+
+.modern-auth-button {
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.modern-auth-button.login {
+    color: #64748b;
+    background: transparent;
+}
+
+.modern-auth-button.login:hover {
+    color: #1e293b;
+    background: rgba(248, 250, 252, 0.8);
+}
+
+.dark .modern-auth-button.login {
+    color: #cbd5e1;
+}
+
+.dark .modern-auth-button.login:hover {
+    color: white;
+    background: rgba(51, 65, 85, 0.8);
+}
+
+.modern-auth-button.register {
+    color: white;
+    background: linear-gradient(45deg, #3b82f6, #6366f1);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.modern-auth-button.register:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+}
+
+.modern-mobile-menu {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.dark .modern-mobile-menu {
+    background: rgba(30, 41, 59, 0.98);
+    border-top-color: rgba(51, 65, 85, 0.6);
+}
+
+.modern-mobile-nav-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    margin: 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    color: #64748b;
+}
+
+.dark .modern-mobile-nav-link {
+    color: #cbd5e1;
+}
+
+.modern-mobile-nav-link:hover {
+    color: #1e293b;
+    background: rgba(248, 250, 252, 0.8);
+}
+
+.dark .modern-mobile-nav-link:hover {
+    color: white;
+    background: rgba(51, 65, 85, 0.8);
+}
+
+.modern-mobile-nav-link.active {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    font-weight: 600;
+}
