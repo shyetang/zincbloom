@@ -70,7 +70,18 @@ class ApiClient {
         signal: AbortSignal.timeout(this.timeout),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      }
+      else {
+        // 如果不是JSON，获取文本内容
+        const text = await response.text();
+        console.error(`非JSON响应 (${response.status}):`, text);
+        data = { message: text, error: `HTTP ${response.status}` };
+      }
 
       if (response.ok) {
         return {
@@ -83,9 +94,9 @@ class ApiClient {
         return {
           success: false,
           error: {
-            message: data.message || "请求失败",
+            message: data.message || data.error || "请求失败",
             code: data.code || ERROR_CODES.SERVER_ERROR,
-            details: data.details,
+            details: data.details || data,
           },
           status: response.status,
         };
@@ -146,6 +157,42 @@ class ApiClient {
     return this.request<string[]>("/me/permissions");
   }
 
+  // 更新用户资料
+  async updateProfile(data: {
+    username?: string;
+    email?: string;
+    bio?: string;
+    website?: string;
+  }): Promise<ApiResponse<User>> {
+    return this.request<User>("/me/profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 修改密码
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+  }): Promise<ApiResponse<null>> {
+    return this.request<null>("/me/password", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 更新用户偏好设置
+  async updatePreferences(data: {
+    email_notifications?: boolean;
+    public_profile?: boolean;
+    theme?: string;
+  }): Promise<ApiResponse<null>> {
+    return this.request<null>("/me/preferences", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
   // 文章相关 API - 使用公开接口
   async getPosts(
     params?: PostQueryParams,
@@ -197,12 +244,21 @@ class ApiClient {
   ): Promise<ApiResponse<FrontendPaginatedResponse<Category>>> {
     const queryString = params ? `?${buildQueryString(params)}` : "";
 
-    const response = await this.request<PaginatedResponse<Category>>(
+    const response = await this.request<Category[]>(
       `${API_ENDPOINTS.CATEGORIES.LIST}${queryString}`,
     );
 
     if (response.success && response.data) {
-      const transformedData = transformPaginatedResponse(response.data);
+      // 后端返回简单数组，转换为前端期望的分页格式
+      const transformedData: FrontendPaginatedResponse<Category> = {
+        data: response.data,
+        pagination: {
+          page: 1,
+          per_page: response.data.length,
+          total: response.data.length,
+          total_pages: 1,
+        },
+      };
       return {
         success: true,
         data: transformedData,
@@ -215,6 +271,11 @@ class ApiClient {
       error: response.error,
       status: response.status,
     };
+  }
+
+  // 获取所有分类（简单数组格式）
+  async getCategoriesList(): Promise<ApiResponse<Category[]>> {
+    return this.request<Category[]>(API_ENDPOINTS.CATEGORIES.LIST);
   }
 
   async getCategory(slug: string): Promise<ApiResponse<Category>> {
@@ -227,12 +288,21 @@ class ApiClient {
   ): Promise<ApiResponse<FrontendPaginatedResponse<Tag>>> {
     const queryString = params ? `?${buildQueryString(params)}` : "";
 
-    const response = await this.request<PaginatedResponse<Tag>>(
+    const response = await this.request<Tag[]>(
       `${API_ENDPOINTS.TAGS.LIST}${queryString}`,
     );
 
     if (response.success && response.data) {
-      const transformedData = transformPaginatedResponse(response.data);
+      // 后端返回简单数组，转换为前端期望的分页格式
+      const transformedData: FrontendPaginatedResponse<Tag> = {
+        data: response.data,
+        pagination: {
+          page: 1,
+          per_page: response.data.length,
+          total: response.data.length,
+          total_pages: 1,
+        },
+      };
       return {
         success: true,
         data: transformedData,
@@ -247,8 +317,181 @@ class ApiClient {
     };
   }
 
+  // 获取所有标签（简单数组格式）
+  async getTagsList(): Promise<ApiResponse<Tag[]>> {
+    return this.request<Tag[]>(API_ENDPOINTS.TAGS.LIST);
+  }
+
   async getTag(slug: string): Promise<ApiResponse<Tag>> {
     return this.request<Tag>(API_ENDPOINTS.TAGS.DETAIL(slug));
+  }
+
+  // 文章管理 API (需要认证)
+  async createPost(data: {
+    title: string;
+    content_markdown: string;
+    excerpt?: string;
+    thumbnail?: string;
+    status?: "draft" | "published";
+    categories?: string[];
+    tags?: string[];
+  }): Promise<ApiResponse<Post>> {
+    // 转换前端字段到后端字段
+    const payload = {
+      title: data.title,
+      content: data.content_markdown, // 后端期望 content 而不是 content_markdown
+      category_ids: data.categories, // 转换为 category_ids
+      tag_ids: data.tags, // 转换为 tag_ids
+    };
+
+    return this.request<Post>("/posts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updatePost(id: string, data: {
+    title?: string;
+    content_markdown?: string;
+    excerpt?: string;
+    thumbnail?: string;
+    status?: "draft" | "published";
+    categories?: string[];
+    tags?: string[];
+    published_at?: string;
+  }): Promise<ApiResponse<Post>> {
+    // 转换前端字段到后端字段
+    const payload: any = {};
+
+    if (data.title !== undefined) payload.title = data.title;
+    if (data.content_markdown !== undefined) payload.content = data.content_markdown;
+    if (data.excerpt !== undefined) payload.excerpt = data.excerpt;
+    if (data.thumbnail !== undefined) payload.thumbnail = data.thumbnail;
+    if (data.categories !== undefined) payload.category_ids = data.categories;
+    if (data.tags !== undefined) payload.tag_ids = data.tags;
+    if (data.published_at !== undefined) payload.published_at = data.published_at;
+
+    // 根据status决定是否发布
+    if (data.status === "published") {
+      payload.published_at = data.published_at || new Date().toISOString();
+    }
+    else if (data.status === "draft") {
+      payload.unpublish = true;
+    }
+
+    return this.request<Post>(`/posts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deletePost(id: string): Promise<ApiResponse<null>> {
+    return this.request<null>(`/posts/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  // 批量操作
+  async bulkUpdatePosts(data: {
+    post_ids: string[];
+    action: "publish" | "draft" | "delete";
+  }): Promise<ApiResponse<null>> {
+    return this.request<null>("/posts/bulk", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 根据分类获取文章
+  async getPostsByCategory(
+    categorySlug: string,
+    params?: PostQueryParams,
+  ): Promise<ApiResponse<PostsResponse>> {
+    const mergedParams = {
+      category: categorySlug,
+      ...params,
+    };
+    return this.getPosts(mergedParams);
+  }
+
+  // 根据标签获取文章
+  async getPostsByTag(
+    tagName: string,
+    params?: PostQueryParams,
+  ): Promise<ApiResponse<PostsResponse>> {
+    const mergedParams = {
+      tag: tagName,
+      ...params,
+    };
+    return this.getPosts(mergedParams);
+  }
+
+  // 根据作者获取文章
+  async getPostsByAuthor(
+    authorUsername: string,
+    params?: PostQueryParams,
+  ): Promise<ApiResponse<PostsResponse>> {
+    const mergedParams = {
+      author: authorUsername,
+      ...params,
+    };
+    return this.getPosts(mergedParams);
+  }
+
+  // 获取作者统计信息（基于文章数据推导）
+  async getAuthorStats(
+    authorUsername: string,
+  ): Promise<ApiResponse<{
+    totalPosts: number;
+    publishedPosts: number;
+    draftPosts: number;
+    totalViews: number;
+    categories: string[];
+    tags: string[];
+  }>> {
+    try {
+      // 获取该作者的所有已发布文章
+      const publishedResponse = await this.getPostsByAuthor(authorUsername, {
+        status: "published",
+        per_page: 1000, // 获取所有文章用于统计
+      });
+
+      if (!publishedResponse.success || !publishedResponse.data) {
+        return {
+          success: false,
+          error: { message: "获取作者文章失败" },
+        };
+      }
+
+      const posts = publishedResponse.data.data;
+      const categoriesSet = new Set<string>();
+      const tagsSet = new Set<string>();
+
+      posts.forEach((post) => {
+        post.categories?.forEach(cat => categoriesSet.add(cat.name));
+        post.tags?.forEach(tag => tagsSet.add(tag.name));
+      });
+
+      return {
+        success: true,
+        data: {
+          totalPosts: posts.length,
+          publishedPosts: posts.length,
+          draftPosts: 0, // 无法获取草稿数据
+          totalViews: 0, // 暂无浏览量数据
+          categories: Array.from(categoriesSet),
+          tags: Array.from(tagsSet),
+        },
+      };
+    }
+    catch (error) {
+      return {
+        success: false,
+        error: {
+          message: error instanceof Error ? error.message : "获取作者统计失败",
+        },
+      };
+    }
   }
 }
 
@@ -257,9 +500,8 @@ let apiClient: ApiClient | null = null;
 
 export function useApi() {
   if (!apiClient) {
-    // 在浏览器环境中使用相对路径通过代理访问
-    // 在服务器端直接使用后端 URL
-    const baseURL = import.meta.client ? "" : "http://localhost:8080";
+    // 直接使用后端 URL，无论在客户端还是服务端
+    const baseURL = "http://localhost:8080";
 
     apiClient = new ApiClient({
       baseURL,

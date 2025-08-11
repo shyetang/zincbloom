@@ -14,6 +14,30 @@ export interface User {
   roles?: string[];
 }
 
+// 作者信息类型（基于文章数据推导）
+export interface Author {
+  id: string;
+  username: string;
+  email?: string;
+  bio?: string;
+  website?: string;
+  avatar?: string;
+  created_at: string;
+  postCount: number;
+  categories: string[];
+  tags: string[];
+  lastActiveAt: string;
+}
+
+export interface AuthorStats {
+  totalPosts: number;
+  publishedPosts: number;
+  draftPosts: number;
+  totalViews: number;
+  categories: string[];
+  tags: string[];
+}
+
 export interface LoginCredentials {
   username: string;
   password: string;
@@ -181,22 +205,22 @@ export type BackendTagsResponse = PaginatedResponse<Tag>;
 // ===== 常量 =====
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: "/api/auth/login",
-    REGISTER: "/api/auth/register",
-    LOGOUT: "/api/auth/logout",
-    REFRESH: "/api/auth/refresh",
+    LOGIN: "/auth/login",
+    REGISTER: "/auth/register",
+    LOGOUT: "/auth/logout",
+    REFRESH: "/auth/refresh",
   },
   POSTS: {
-    LIST: "/api/blog/posts", // 使用公开的博客接口
-    DETAIL: (slug: string) => `/api/blog/posts/${slug}`,
+    LIST: "/blog/posts", // 使用公开的博客接口
+    DETAIL: (slug: string) => `/blog/posts/${slug}`,
   },
   CATEGORIES: {
-    LIST: "/api/categories",
-    DETAIL: (slug: string) => `/api/categories/${slug}`,
+    LIST: "/categories",
+    DETAIL: (slug: string) => `/categories/${slug}`,
   },
   TAGS: {
-    LIST: "/api/tags",
-    DETAIL: (slug: string) => `/api/tags/${slug}`,
+    LIST: "/tags",
+    DETAIL: (slug: string) => `/tags/${slug}`,
   },
 } as const;
 

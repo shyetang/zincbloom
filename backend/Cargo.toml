@@ -35,6 +35,7 @@ blake3 = "1.8.2"
 rand = { version = "0.9.1", features = ["thread_rng"] }
 lettre = { version = "0.11.17", features = ["tokio1-native-tls"] }
 comrak = "0.39.0"
+tower-http = { version = "0.6", features = ["cors"] }
 [dev-dependencies]
 anyhow = "1.0"
 serde_json = "1"

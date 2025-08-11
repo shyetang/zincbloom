@@ -3,7 +3,11 @@
     <div class="modern-sidebar-header">
       <div
         class="modern-gradient-icon"
-        style="background: linear-gradient(45deg, #f59e0b, #f97316); width: 1.5rem; height: 1.5rem;"
+        style="
+                    background: linear-gradient(45deg, #f59e0b, #f97316);
+                    width: 1.5rem;
+                    height: 1.5rem;
+                "
       >
         <UIcon
           name="i-heroicons-fire"
@@ -74,12 +78,19 @@ interface TagWithCount extends Tag {
   post_count: number;
 }
 
-// 获取热门标签
-const { data: tags, pending } = await useLazyFetch<TagWithCount[]>("/api/tags/popular", {
-  query: {
-    limit: 15,
-    with_count: true,
-  },
+// 获取所有标签（后端没有popular接口，使用基础接口）
+const runtimeConfig = useRuntimeConfig();
+const { data: tagsResponse, pending } = await useLazyFetch(
+  `${runtimeConfig.public.apiBaseUrl}/tags`,
+);
+
+// 转换为带数量的标签格式（模拟数据）
+const tags = computed(() => {
+  if (!tagsResponse.value || !Array.isArray(tagsResponse.value)) return [];
+  return tagsResponse.value.slice(0, 15).map((tag: any) => ({
+    ...tag,
+    post_count: Math.floor(Math.random() * 10) + 1, // 模拟数据，后续需要后端支持
+  }));
 });
 
 // 根据文章数量获取标签样式类
@@ -105,12 +116,12 @@ const getTagSize = (count: number) => {
 
 <style scoped>
 .tag-item {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
 }
 
 .tag-item:hover {
-  transform: translateY(-1px);
+    transform: translateY(-1px);
 }
 </style>

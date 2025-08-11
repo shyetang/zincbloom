@@ -5,7 +5,11 @@
       <div class="modern-sidebar-header">
         <div
           class="modern-gradient-icon"
-          style="background: linear-gradient(45deg, #64748b, #475569); width: 1.5rem; height: 1.5rem;"
+          style="
+                        background: linear-gradient(45deg, #64748b, #475569);
+                        width: 1.5rem;
+                        height: 1.5rem;
+                    "
         >
           <UIcon
             name="i-heroicons-magnifying-glass"
@@ -35,7 +39,11 @@
         />
       </div>
       <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">
-        提示: 按 <kbd class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-900 dark:bg-slate-700 dark:text-slate-300">Enter</kbd> 搜索
+        提示: 按
+        <kbd
+          class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-900 dark:bg-slate-700 dark:text-slate-300"
+        >Enter</kbd>
+        搜索
       </div>
     </div>
 
@@ -54,7 +62,11 @@
       <div class="modern-sidebar-header">
         <div
           class="modern-gradient-icon"
-          style="background: linear-gradient(45deg, #10b981, #059669); width: 1.5rem; height: 1.5rem;"
+          style="
+                        background: linear-gradient(45deg, #10b981, #059669);
+                        width: 1.5rem;
+                        height: 1.5rem;
+                    "
         >
           <UIcon
             name="i-heroicons-chart-bar"
@@ -86,25 +98,33 @@
       >
         <div class="flex justify-between items-center">
           <span class="text-sm text-gray-600 dark:text-gray-400">总文章数</span>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">
+          <span
+            class="text-sm font-medium text-gray-900 dark:text-white"
+          >
             {{ stats?.total_posts || 0 }}
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-sm text-gray-600 dark:text-gray-400">总用户数</span>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">
+          <span
+            class="text-sm font-medium text-gray-900 dark:text-white"
+          >
             {{ stats?.total_users || 0 }}
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-sm text-gray-600 dark:text-gray-400">总标签数</span>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">
+          <span
+            class="text-sm font-medium text-gray-900 dark:text-white"
+          >
             {{ stats?.total_tags || 0 }}
           </span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-sm text-gray-600 dark:text-gray-400">总分类数</span>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">
+          <span
+            class="text-sm font-medium text-gray-900 dark:text-white"
+          >
             {{ stats?.total_categories || 0 }}
           </span>
         </div>
@@ -116,7 +136,11 @@
       <div class="modern-sidebar-header">
         <div
           class="modern-gradient-icon"
-          style="background: linear-gradient(45deg, #6366f1, #8b5cf6); width: 1.5rem; height: 1.5rem;"
+          style="
+                        background: linear-gradient(45deg, #6366f1, #8b5cf6);
+                        width: 1.5rem;
+                        height: 1.5rem;
+                    "
         >
           <UIcon
             name="i-heroicons-chat-bubble-left-right"
@@ -146,7 +170,11 @@
       <div class="modern-sidebar-header">
         <div
           class="modern-gradient-icon"
-          style="background: linear-gradient(45deg, #f43f5e, #ec4899); width: 1.5rem; height: 1.5rem;"
+          style="
+                        background: linear-gradient(45deg, #f43f5e, #ec4899);
+                        width: 1.5rem;
+                        height: 1.5rem;
+                    "
         >
           <UIcon
             name="i-heroicons-link"
@@ -191,7 +219,18 @@ interface SiteStats {
   total_categories: number;
 }
 
-const { data: stats, pending: statsPending } = await useLazyFetch<SiteStats>("/api/stats");
+// 由于后端没有统计接口，暂时使用模拟数据
+const stats = ref({
+  total_posts: 0,
+  total_users: 0,
+  total_tags: 0,
+  total_categories: 0,
+});
+const statsPending = ref(false);
+
+// TODO: 后续后端添加统计接口后再连接
+// const runtimeConfig = useRuntimeConfig();
+// const { data: stats, pending: statsPending } = await useLazyFetch<SiteStats>(`${runtimeConfig.public.apiBaseUrl}/stats`);
 
 // 友情链接数据
 const friendLinks = ref([
@@ -220,22 +259,22 @@ const clearSearch = () => {
 
 <style scoped>
 kbd {
-  display: inline-block;
-  padding: 0.125rem 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  color: rgb(55 65 81);
-  background-color: rgb(243 244 246);
-  border: 1px solid rgb(209 213 219);
-  border-radius: 0.25rem;
-  box-shadow: inset 0 -1px 0 rgb(209 213 219);
+    display: inline-block;
+    padding: 0.125rem 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    color: rgb(55 65 81);
+    background-color: rgb(243 244 246);
+    border: 1px solid rgb(209 213 219);
+    border-radius: 0.25rem;
+    box-shadow: inset 0 -1px 0 rgb(209 213 219);
 }
 
 .dark kbd {
-  color: rgb(209 213 219);
-  background-color: rgb(55 65 81);
-  border-color: rgb(75 85 99);
-  box-shadow: inset 0 -1px 0 rgb(75 85 99);
+    color: rgb(209 213 219);
+    background-color: rgb(55 65 81);
+    border-color: rgb(75 85 99);
+    box-shadow: inset 0 -1px 0 rgb(75 85 99);
 }
 </style>

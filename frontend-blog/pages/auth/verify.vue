@@ -178,10 +178,14 @@ if (token) {
 // 验证邮箱
 async function verifyEmail(verificationToken: string) {
   try {
-    const response = await $fetch("/api/auth/verify", {
-      method: "POST",
-      body: { token: verificationToken },
-    });
+    const runtimeConfig = useRuntimeConfig();
+    const response = await $fetch(
+      `${runtimeConfig.public.apiBaseUrl}/auth/verify-email`,
+      {
+        method: "POST",
+        body: { token: verificationToken },
+      },
+    );
 
     if ((response as any).success) {
       verificationStatus.value = "success";
@@ -193,7 +197,8 @@ async function verifyEmail(verificationToken: string) {
     }
     else {
       verificationStatus.value = "error";
-      errorMessage.value = (response as any).error?.message || "验证失败，请重试";
+      errorMessage.value
+                = (response as any).error?.message || "验证失败，请重试";
     }
   }
   catch (error) {

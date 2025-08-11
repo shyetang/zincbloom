@@ -4,15 +4,11 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
+    <!-- 全局通知组件 -->
+    <UNotifications />
   </div>
 </template>
 
 <script setup lang="ts">
-// 初始化认证状态
-const authStore = useAuthStore();
-
-onMounted(() => {
-  // 应用启动时初始化认证状态
-  authStore.initialize();
-});
+// 认证状态将通过插件自动初始化
 </script>

@@ -1,9 +1,5 @@
 // 认证状态管理
-import type {
-  User,
-  LoginCredentials,
-  RegisterData,
-} from "~/types";
+import type { User, LoginCredentials, RegisterData } from "~/types";
 
 interface AuthState {
   user: User | null;
@@ -92,6 +88,11 @@ export const useAuthStore = defineStore("auth", {
   actions: {
     // 初始化认证状态（从本地存储恢复）
     async initialize() {
+      // 只在客户端执行
+      if (typeof window === "undefined") {
+        return;
+      }
+
       this.isLoading = true;
       this.error = null;
 
@@ -222,12 +223,14 @@ export const useAuthStore = defineStore("auth", {
       this.user = user;
       this.isAuthenticated = true;
 
-      // 保存到本地存储
-      localStorage.setItem(storageKeys.ACCESS_TOKEN, accessToken);
-      localStorage.setItem(storageKeys.USER, JSON.stringify(user));
+      // 保存到本地存储（仅在客户端）
+      if (typeof window !== "undefined") {
+        localStorage.setItem(storageKeys.ACCESS_TOKEN, accessToken);
+        localStorage.setItem(storageKeys.USER, JSON.stringify(user));
 
-      if (refreshToken) {
-        localStorage.setItem(storageKeys.REFRESH_TOKEN, refreshToken);
+        if (refreshToken) {
+          localStorage.setItem(storageKeys.REFRESH_TOKEN, refreshToken);
+        }
       }
 
       // 获取用户权限
@@ -241,10 +244,28 @@ export const useAuthStore = defineStore("auth", {
       this.permissions = [];
       this.error = null;
 
-      // 清除本地存储
-      localStorage.removeItem(storageKeys.ACCESS_TOKEN);
-      localStorage.removeItem(storageKeys.REFRESH_TOKEN);
-      localStorage.removeItem(storageKeys.USER);
+      // 清除本地存储（仅在客户端）
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(storageKeys.ACCESS_TOKEN);
+        localStorage.removeItem(storageKeys.REFRESH_TOKEN);
+        localStorage.removeItem(storageKeys.USER);
+
+        // 检查是否需要保留记住的凭据
+        const remembered = localStorage.getItem("rememberedCredentials");
+        if (remembered) {
+          try {
+            const credentials = JSON.parse(remembered);
+            // 如果用户之前没有选择记住我，则清除凭据
+            if (!credentials.remember) {
+              localStorage.removeItem("rememberedCredentials");
+            }
+          }
+          catch {
+            // 如果解析失败，直接清除
+            localStorage.removeItem("rememberedCredentials");
+          }
+        }
+      }
     },
 
     // 验证 token 有效性
@@ -287,6 +308,10 @@ export const useAuthStore = defineStore("auth", {
 
     // 刷新 token
     async refreshToken(): Promise<boolean> {
+      if (typeof window === "undefined") {
+        return false;
+      }
+
       try {
         const refreshToken = localStorage.getItem(
           storageKeys.REFRESH_TOKEN,

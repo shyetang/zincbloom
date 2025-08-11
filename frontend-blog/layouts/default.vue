@@ -31,9 +31,6 @@
       />
     </Transition>
 
-    <!-- 全局通知组件 -->
-    <UNotifications />
-
     <!-- 页面加载进度条 -->
     <UProgress
       v-if="$route.meta.showProgress !== false"

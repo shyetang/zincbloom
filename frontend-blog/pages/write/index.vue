@@ -1,246 +1,437 @@
 <template>
-  <div class="container mx-auto px-4 py-8 max-w-4xl">
-    <!-- 页面标题 -->
-    <div class="text-center mb-12">
-      <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-        开始创作
-      </h1>
-      <p class="text-lg text-gray-600 dark:text-gray-400">
-        分享您的想法，记录您的经历，与世界分享您的故事
-      </p>
-    </div>
-
-    <!-- 创作选项 -->
-    <div class="grid md:grid-cols-2 gap-8 mb-12">
-      <!-- 新建文章 -->
-      <div
-        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 hover:shadow-lg transition-shadow"
-      >
-        <div
-          class="flex items-center justify-center w-16 h-16 bg-primary-100 dark:bg-primary-900 rounded-full mb-6 mx-auto"
-        >
-          <UIcon
-            name="i-heroicons-pencil-square"
-            class="w-8 h-8 text-primary-600 dark:text-primary-400"
-          />
-        </div>
-        <h3
-          class="text-xl font-semibold text-gray-900 dark:text-white text-center mb-4"
-        >
-          写新文章
-        </h3>
-        <p class="text-gray-600 dark:text-gray-400 text-center mb-6">
-          创建一篇全新的文章，分享您的想法和见解
-        </p>
-        <UButton
-          color="primary"
-          size="lg"
-          block
-          :loading="creating"
-          @click="createNewPost"
-        >
-          开始写作
-        </UButton>
-      </div>
-
-      <!-- 草稿箱 -->
-      <div
-        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 hover:shadow-lg transition-shadow"
-      >
-        <div
-          class="flex items-center justify-center w-16 h-16 bg-yellow-100 dark:bg-yellow-900 rounded-full mb-6 mx-auto"
-        >
-          <UIcon
-            name="i-heroicons-document-text"
-            class="w-8 h-8 text-yellow-600 dark:text-yellow-400"
-          />
-        </div>
-        <h3
-          class="text-xl font-semibold text-gray-900 dark:text-white text-center mb-4"
-        >
-          继续草稿
-        </h3>
-        <p class="text-gray-600 dark:text-gray-400 text-center mb-6">
-          继续编辑您未完成的草稿文章
-        </p>
-        <UButton
-          to="/user/posts?status=draft"
-          variant="outline"
-          size="lg"
-          block
-        >
-          查看草稿 ({{ draftCount }})
-        </UButton>
-      </div>
-    </div>
-
-    <!-- 最近草稿 -->
-    <div
-      v-if="(recentDrafts as any)?.data?.length"
-      class="mb-12"
+  <div>
+    <!-- Modern Hero Section -->
+    <section
+      class="modern-hero"
+      style="padding: 4rem 0 3rem 0;"
     >
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        最近的草稿
-      </h2>
-      <div class="space-y-4">
+      <div class="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <div style="text-align: center;">
+          <!-- Modern Icon -->
+          <div style="margin: 0 auto 1.5rem; width: 4rem; height: 4rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: linear-gradient(45deg, #f59e0b, #f97316); box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);">
+            <UIcon
+              name="i-heroicons-pencil-square"
+              style="width: 2rem; height: 2rem; color: white;"
+            />
+          </div>
+
+          <!-- Modern Title -->
+          <h1
+            style="font-size: 2.75rem; font-weight: 700; line-height: 1.1; margin-bottom: 1rem; color: #1e293b;"
+            class="dark:text-white"
+          >
+            开始创作
+          </h1>
+
+          <!-- Subtitle -->
+          <p
+            style="font-size: 1.125rem; color: #64748b; max-width: 32rem; margin: 0 auto; line-height: 1.5;"
+            class="dark:text-slate-300"
+          >
+            分享您的想法，记录珍贵经历，用文字触动世界的心灵
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Section -->
+    <section
+      class="modern-content-section"
+      style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #eff6ff 100%); padding: 2rem 0; margin: 0;"
+    >
+      <div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <!-- 创作选项 -->
+        <div class="grid md:grid-cols-2 gap-8 mb-12">
+          <!-- 新建文章 -->
+          <div
+            class="modern-feature-card group cursor-pointer"
+            @click="createNewPost"
+          >
+            <div
+              class="modern-feature-icon"
+              style="background: linear-gradient(45deg, #3b82f6, #6366f1); margin-bottom: 1.5rem;"
+            >
+              <UIcon
+                name="i-heroicons-pencil-square"
+                class="w-6 h-6 text-white"
+              />
+            </div>
+            <h3 class="text-2xl font-bold text-slate-900 dark:text-white text-center mb-4">
+              写新文章
+            </h3>
+            <p class="text-slate-600 dark:text-slate-400 text-center mb-8 leading-relaxed">
+              创建一篇全新的文章，分享您独特的想法和深刻见解
+            </p>
+            <UButton
+              size="lg"
+              block
+              :loading="creating"
+              class="modern-button modern-button-primary"
+              style="padding: 1rem 2rem; background: linear-gradient(45deg, #3b82f6, #6366f1); color: white; border: none; font-weight: 600;"
+              @click.stop="createNewPost"
+            >
+              <UIcon
+                name="i-heroicons-sparkles"
+                class="w-5 h-5 mr-2"
+              />
+              开始写作
+            </UButton>
+          </div>
+
+          <!-- 草稿箱 -->
+          <div class="modern-feature-card group">
+            <div
+              class="modern-feature-icon"
+              style="background: linear-gradient(45deg, #f59e0b, #f97316); margin-bottom: 1.5rem;"
+            >
+              <UIcon
+                name="i-heroicons-document-text"
+                class="w-6 h-6 text-white"
+              />
+            </div>
+            <h3 class="text-2xl font-bold text-slate-900 dark:text-white text-center mb-4">
+              继续草稿
+            </h3>
+            <p class="text-slate-600 dark:text-slate-400 text-center mb-8 leading-relaxed">
+              继续完善您未完成的草稿，让创意得到完美呈现
+            </p>
+            <UButton
+              to="/user/posts?status=draft"
+              size="lg"
+              block
+              class="modern-button modern-button-secondary"
+              style="padding: 1rem 2rem; border: 2px solid #f59e0b; color: #f59e0b; font-weight: 600;"
+            >
+              <UIcon
+                name="i-heroicons-folder-open"
+                class="w-5 h-5 mr-2"
+              />
+              查看草稿 ({{ draftCount }})
+            </UButton>
+          </div>
+        </div>
+
+        <!-- 最近草稿 -->
         <div
-          v-for="draft in (recentDrafts as any)?.data || []"
-          :key="draft.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow"
+          v-if="(recentDrafts as any)?.data?.length"
+          class="modern-content-section mb-12"
+          style="background: rgba(255, 255, 255, 0.9); border-radius: 1rem; padding: 2rem; margin-bottom: 1.5rem; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);"
         >
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <h3
-                class="text-lg font-semibold text-gray-900 dark:text-white mb-2"
+          <div class="modern-section-header">
+            <div>
+              <div class="flex items-center gap-3 mb-2">
+                <div
+                  class="modern-gradient-icon"
+                  style="background: linear-gradient(45deg, #8b5cf6, #a855f7); width: 2.5rem; height: 2.5rem;"
+                >
+                  <UIcon
+                    name="i-heroicons-clock"
+                    class="h-5 w-5 text-white"
+                  />
+                </div>
+                <h2
+                  class="modern-section-title"
+                  style="font-size: 1.5rem;"
+                >
+                  最近的草稿
+                </h2>
+              </div>
+              <p class="modern-section-subtitle">
+                继续您未完成的创作
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="space-y-4"
+            style="padding: 0 1rem;"
+          >
+            <div
+              v-for="draft in (recentDrafts as any)?.data || []"
+              :key="draft.id"
+              class="modern-post-card"
+              style="padding: 2rem;"
+            >
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
+                    {{ draft.title || "无标题草稿" }}
+                  </h3>
+                  <div class="flex items-center gap-2 mb-3">
+                    <UIcon
+                      name="i-heroicons-calendar"
+                      class="w-4 h-4 text-slate-500"
+                    />
+                    <p class="text-sm text-slate-500 dark:text-slate-400">
+                      {{ formatDate(draft.updated_at) }} 更新
+                    </p>
+                  </div>
+                  <p class="text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                    {{ getExcerpt(draft.content_markdown) }}
+                  </p>
+                </div>
+                <div class="ml-6 flex-shrink-0">
+                  <UButton
+                    :to="`/write/${draft.id}`"
+                    class="modern-button modern-button-secondary"
+                    style="padding: 0.75rem 1.5rem; border: 2px solid #8b5cf6; color: #8b5cf6; font-weight: 500;"
+                  >
+                    <UIcon
+                      name="i-heroicons-pencil"
+                      class="w-4 h-4 mr-2"
+                    />
+                    继续编辑
+                  </UButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 写作统计 -->
+        <div
+          class="modern-content-section mb-12"
+          style="background: rgba(255, 255, 255, 0.9); border-radius: 1rem; padding: 2rem; margin-bottom: 1.5rem; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);"
+        >
+          <div class="modern-section-header">
+            <div>
+              <div class="flex items-center gap-3 mb-2">
+                <div
+                  class="modern-gradient-icon"
+                  style="background: linear-gradient(45deg, #06b6d4, #0891b2); width: 2.5rem; height: 2.5rem;"
+                >
+                  <UIcon
+                    name="i-heroicons-chart-bar"
+                    class="h-5 w-5 text-white"
+                  />
+                </div>
+                <h2
+                  class="modern-section-title"
+                  style="font-size: 1.5rem;"
+                >
+                  写作统计
+                </h2>
+              </div>
+              <p class="modern-section-subtitle">
+                记录您的创作成就
+              </p>
+            </div>
+          </div>
+
+          <div
+            class="grid grid-cols-2 md:grid-cols-4 gap-6"
+            style="padding: 0 1rem;"
+          >
+            <div
+              class="modern-post-card text-center"
+              style="padding: 1.5rem;"
+            >
+              <div
+                class="modern-gradient-icon"
+                style="background: linear-gradient(45deg, #3b82f6, #6366f1); width: 3rem; height: 3rem; margin: 0 auto 1rem;"
               >
-                {{ draft.title || "无标题草稿" }}
+                <UIcon
+                  name="i-heroicons-document-text"
+                  class="w-5 h-5 text-white"
+                />
+              </div>
+              <div class="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {{ (stats as any)?.totalPosts || 0 }}
+              </div>
+              <div class="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                总文章数
+              </div>
+            </div>
+
+            <div
+              class="modern-post-card text-center"
+              style="padding: 1.5rem;"
+            >
+              <div
+                class="modern-gradient-icon"
+                style="background: linear-gradient(45deg, #10b981, #059669); width: 3rem; height: 3rem; margin: 0 auto 1rem;"
+              >
+                <UIcon
+                  name="i-heroicons-rocket-launch"
+                  class="w-5 h-5 text-white"
+                />
+              </div>
+              <div class="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {{ (stats as any)?.publishedPosts || 0 }}
+              </div>
+              <div class="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                已发布
+              </div>
+            </div>
+
+            <div
+              class="modern-post-card text-center"
+              style="padding: 1.5rem;"
+            >
+              <div
+                class="modern-gradient-icon"
+                style="background: linear-gradient(45deg, #f59e0b, #d97706); width: 3rem; height: 3rem; margin: 0 auto 1rem;"
+              >
+                <UIcon
+                  name="i-heroicons-document"
+                  class="w-5 h-5 text-white"
+                />
+              </div>
+              <div class="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {{ (stats as any)?.draftPosts || 0 }}
+              </div>
+              <div class="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                草稿
+              </div>
+            </div>
+
+            <div
+              class="modern-post-card text-center"
+              style="padding: 1.5rem;"
+            >
+              <div
+                class="modern-gradient-icon"
+                style="background: linear-gradient(45deg, #8b5cf6, #7c3aed); width: 3rem; height: 3rem; margin: 0 auto 1rem;"
+              >
+                <UIcon
+                  name="i-heroicons-pencil"
+                  class="w-5 h-5 text-white"
+                />
+              </div>
+              <div class="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                {{ (stats as any)?.totalWords || 0 }}
+              </div>
+              <div class="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                总字数
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 写作技巧 -->
+        <div
+          class="modern-features-section"
+          style="background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%); border-radius: 1.5rem; padding: 3rem; position: relative; overflow: hidden;"
+        >
+          <div
+            class="modern-section-header"
+            style="text-align: center; margin-bottom: 3rem;"
+          >
+            <div>
+              <div class="flex items-center justify-center gap-3 mb-4">
+                <div
+                  class="modern-gradient-icon"
+                  style="background: linear-gradient(45deg, #f59e0b, #f97316); width: 3rem; height: 3rem;"
+                >
+                  <UIcon
+                    name="i-heroicons-academic-cap"
+                    class="h-6 w-6 text-white"
+                  />
+                </div>
+                <h2
+                  class="modern-section-title"
+                  style="font-size: 2rem;"
+                >
+                  写作小贴士
+                </h2>
+              </div>
+              <p
+                class="modern-section-subtitle"
+                style="font-size: 1rem;"
+              >
+                掌握这些技巧，让您的文章更具魅力
+              </p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-8">
+            <div
+              class="modern-feature-card"
+              style="background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); padding: 2rem;"
+            >
+              <div
+                class="modern-feature-icon"
+                style="background: linear-gradient(45deg, #fbbf24, #f59e0b); margin-bottom: 1.5rem;"
+              >
+                <UIcon
+                  name="i-heroicons-light-bulb"
+                  class="w-6 h-6 text-white"
+                />
+              </div>
+              <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
+                明确主题
               </h3>
-              <p
-                class="text-sm text-gray-600 dark:text-gray-400 mb-4"
-              >
-                {{ formatDate(draft.updated_at) }} 更新
-              </p>
-              <p
-                class="text-gray-600 dark:text-gray-400 line-clamp-2"
-              >
-                {{ getExcerpt(draft.content) }}
+              <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+                在开始写作前，先确定文章的核心主题和要传达的信息，让读者一目了然。
               </p>
             </div>
-            <div class="ml-4 flex-shrink-0">
-              <UButton
-                :to="`/write/${draft.id}`"
-                variant="outline"
-                size="sm"
+
+            <div
+              class="modern-feature-card"
+              style="background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); padding: 2rem;"
+            >
+              <div
+                class="modern-feature-icon"
+                style="background: linear-gradient(45deg, #3b82f6, #6366f1); margin-bottom: 1.5rem;"
               >
-                继续编辑
-              </UButton>
+                <UIcon
+                  name="i-heroicons-user-group"
+                  class="w-6 h-6 text-white"
+                />
+              </div>
+              <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
+                了解读者
+              </h3>
+              <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+                考虑您的目标读者群体，用他们能理解的语言和方式来表达观点。
+              </p>
+            </div>
+
+            <div
+              class="modern-feature-card"
+              style="background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); padding: 2rem;"
+            >
+              <div
+                class="modern-feature-icon"
+                style="background: linear-gradient(45deg, #10b981, #059669); margin-bottom: 1.5rem;"
+              >
+                <UIcon
+                  name="i-heroicons-squares-2x2"
+                  class="w-6 h-6 text-white"
+                />
+              </div>
+              <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
+                结构清晰
+              </h3>
+              <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+                使用标题、段落和列表来组织内容，让文章条理清晰，易于阅读。
+              </p>
+            </div>
+
+            <div
+              class="modern-feature-card"
+              style="background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); padding: 2rem;"
+            >
+              <div
+                class="modern-feature-icon"
+                style="background: linear-gradient(45deg, #8b5cf6, #7c3aed); margin-bottom: 1.5rem;"
+              >
+                <UIcon
+                  name="i-heroicons-arrow-path"
+                  class="w-6 h-6 text-white"
+                />
+              </div>
+              <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-3">
+                反复斟酌
+              </h3>
+              <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+                好文章是改出来的，多次修改和完善您的内容，精益求精。
+              </p>
             </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- 写作统计 -->
-    <div
-      class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8"
-    >
-      <h2
-        class="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center"
-      >
-        写作统计
-      </h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div class="text-center">
-          <div
-            class="text-3xl font-bold text-primary-600 dark:text-primary-400"
-          >
-            {{ (stats as any)?.totalPosts || 0 }}
-          </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">
-            总文章数
-          </div>
-        </div>
-        <div class="text-center">
-          <div
-            class="text-3xl font-bold text-green-600 dark:text-green-400"
-          >
-            {{ (stats as any)?.publishedPosts || 0 }}
-          </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">
-            已发布
-          </div>
-        </div>
-        <div class="text-center">
-          <div
-            class="text-3xl font-bold text-yellow-600 dark:text-yellow-400"
-          >
-            {{ (stats as any)?.draftPosts || 0 }}
-          </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">
-            草稿
-          </div>
-        </div>
-        <div class="text-center">
-          <div
-            class="text-3xl font-bold text-blue-600 dark:text-blue-400"
-          >
-            {{ (stats as any)?.totalWords || 0 }}
-          </div>
-          <div class="text-sm text-gray-600 dark:text-gray-400">
-            总字数
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 写作技巧 -->
-    <div
-      class="mt-12 bg-gradient-to-r from-primary-50 to-blue-50 dark:from-primary-900/20 dark:to-blue-900/20 rounded-xl p-8"
-    >
-      <h2
-        class="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center"
-      >
-        写作小贴士
-      </h2>
-      <div class="grid md:grid-cols-2 gap-6">
-        <div class="flex items-start space-x-3">
-          <UIcon
-            name="i-heroicons-light-bulb"
-            class="w-6 h-6 text-yellow-500 mt-1"
-          />
-          <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">
-              明确主题
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              在开始写作前，先确定文章的核心主题和要传达的信息。
-            </p>
-          </div>
-        </div>
-        <div class="flex items-start space-x-3">
-          <UIcon
-            name="i-heroicons-user-group"
-            class="w-6 h-6 text-blue-500 mt-1"
-          />
-          <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">
-              了解读者
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              考虑您的目标读者，用他们能理解的语言写作。
-            </p>
-          </div>
-        </div>
-        <div class="flex items-start space-x-3">
-          <UIcon
-            name="i-heroicons-pencil"
-            class="w-6 h-6 text-green-500 mt-1"
-          />
-          <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">
-              结构清晰
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              使用标题、段落和列表来组织内容，让文章易于阅读。
-            </p>
-          </div>
-        </div>
-        <div class="flex items-start space-x-3">
-          <UIcon
-            name="i-heroicons-arrow-path"
-            class="w-6 h-6 text-purple-500 mt-1"
-          />
-          <div>
-            <h3 class="font-semibold text-gray-900 dark:text-white">
-              反复修改
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              好文章是改出来的，多次修改和完善您的内容。
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -260,27 +451,43 @@ const creating = ref(false);
 const router = useRouter();
 const toast = useToast();
 
-// 获取草稿数据
-const { data: recentDrafts } = await useLazyFetch("/api/posts", {
-  query: {
-    status: "draft",
-    per_page: 3,
-    sort: "updated_at",
-    order: "desc",
-    author: "me",
-  },
-  default: () => ({ data: [] as any[] }),
-});
+const apiClient = useApi();
 
-// 获取统计数据
-const { data: stats } = await useLazyFetch("/api/posts/stats", {
-  default: () =>
-    ({
-      totalPosts: 0,
-      publishedPosts: 0,
-      draftPosts: 0,
-      totalWords: 0,
-    } as any),
+// 获取草稿数据
+const recentDrafts = ref({ data: [] as any[] });
+const stats = ref({
+  totalPosts: 0,
+  publishedPosts: 0,
+  draftPosts: 0,
+  totalWords: 0,
+} as any);
+
+// 加载数据
+onMounted(async () => {
+  try {
+    // 获取草稿数据
+    const draftsResponse = await apiClient.getPosts({
+      status: "draft",
+      per_page: 3,
+      sort: "updated_at",
+      order: "desc",
+      author: "me",
+    });
+    if (draftsResponse.success && draftsResponse.data) {
+      recentDrafts.value = draftsResponse.data;
+    }
+
+    // 获取统计数据
+    const statsResponse = await $fetch("http://localhost:8080/me/stats", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+      },
+    });
+    stats.value = statsResponse;
+  }
+  catch (error) {
+    console.error("Failed to load data:", error);
+  }
 });
 
 // 计算草稿数量
@@ -291,27 +498,25 @@ const createNewPost = async () => {
   creating.value = true;
 
   try {
-    // 创建新的草稿文章
-    const response = await $fetch("/api/posts", {
-      method: "POST",
-      body: {
-        title: "",
-        content: "",
-        status: "draft",
-      },
+    // 生成唯一的文章标题
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const response = await apiClient.createPost({
+      title: `新建文章_${timestamp}`,
+      content_markdown: "# 开始您的创作...\n\n在这里输入您的文章内容。",
+      status: "draft",
     });
 
-    if ((response as any).success) {
-      router.push(`/write/${(response as any).data.id}`);
+    if (response.success) {
+      router.push(`/write/${response.data?.id || "new"}`);
     }
     else {
-      throw new Error((response as any).error?.message || "创建失败");
+      throw new Error(response.error?.message || "创建失败");
     }
   }
   catch (error) {
     toast.add({
       title: "创建失败",
-      description: "无法创建新文章，请稍后重试",
+      description: error instanceof Error ? error.message : "无法创建新文章，请稍后重试",
       color: "error",
     });
   }

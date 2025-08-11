@@ -3,10 +3,25 @@
     <!-- 标题区域 -->
     <div class="modern-section-header">
       <div>
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+        <div
+          style="
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        margin-bottom: 0.5rem;
+                    "
+        >
           <div
             class="modern-gradient-icon"
-            style="background: linear-gradient(45deg, #06b6d4, #0891b2); width: 2.5rem; height: 2.5rem;"
+            style="
+                            background: linear-gradient(
+                                45deg,
+                                #06b6d4,
+                                #0891b2
+                            );
+                            width: 2.5rem;
+                            height: 2.5rem;
+                        "
           >
             <UIcon
               name="i-heroicons-squares-2x2"
@@ -23,7 +38,19 @@
       </div>
       <a
         href="/categories"
-        style="padding: 0.5rem 1rem; border-radius: 0.75rem; font-size: 0.875rem; text-decoration: none; color: #64748b; background: rgba(248, 250, 252, 0.8); border: 1px solid rgba(226, 232, 240, 0.6); transition: all 0.2s ease; display: flex; align-items: center; gap: 0.5rem;"
+        style="
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.75rem;
+                    font-size: 0.875rem;
+                    text-decoration: none;
+                    color: #64748b;
+                    background: rgba(248, 250, 252, 0.8);
+                    border: 1px solid rgba(226, 232, 240, 0.6);
+                    transition: all 0.2s ease;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                "
         class="hover:text-blue-600 hover:border-blue-300"
       >
         查看全部
@@ -43,9 +70,16 @@
         v-for="i in 6"
         :key="i"
         class="modern-post-card"
-        style="padding: 1.5rem; height: auto;"
+        style="padding: 1.5rem; height: auto"
       >
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+        <div
+          style="
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        margin-bottom: 0.75rem;
+                    "
+        >
           <USkeleton class="w-10 h-10 rounded-lg" />
           <USkeleton class="h-5 w-24" />
         </div>
@@ -64,12 +98,33 @@
         :key="category.id"
         :to="`/posts?category=${category.slug}`"
         class="modern-post-card"
-        style="display: block; text-decoration: none; padding: 1.5rem; height: auto; transition: all 0.3s ease;"
+        style="
+                    display: block;
+                    text-decoration: none;
+                    padding: 1.5rem;
+                    height: auto;
+                    transition: all 0.3s ease;
+                "
       >
         <!-- 分类图标和标题 -->
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+        <div
+          style="
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        margin-bottom: 0.75rem;
+                    "
+        >
           <div
-            style="width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"
+            style="
+                            width: 2.5rem;
+                            height: 2.5rem;
+                            border-radius: 0.75rem;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            flex-shrink: 0;
+                        "
             :style="{
               background: getCategoryGradient(category.slug),
             }"
@@ -79,9 +134,14 @@
               class="w-5 h-5 text-white"
             />
           </div>
-          <div style="flex: 1; min-width: 0;">
+          <div style="flex: 1; min-width: 0">
             <h3
-              style="font-size: 1rem; font-weight: 600; color: #1e293b; margin: 0;"
+              style="
+                                font-size: 1rem;
+                                font-weight: 600;
+                                color: #1e293b;
+                                margin: 0;
+                            "
               class="dark:text-white"
             >
               {{ category.name }}
@@ -91,23 +151,43 @@
 
         <!-- 分类描述 -->
         <p
-          style="font-size: 0.875rem; color: #64748b; margin-bottom: 0.75rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;"
+          style="
+                        font-size: 0.875rem;
+                        color: #64748b;
+                        margin-bottom: 0.75rem;
+                        line-height: 1.5;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                    "
           class="dark:text-slate-400"
         >
-          {{ category.description || '暂无描述' }}
+          {{ category.description || "暂无描述" }}
         </p>
 
         <!-- 文章数量 -->
-        <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div
+          style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    "
+        >
           <span
-            style="font-size: 0.875rem; color: #94a3b8;"
+            style="font-size: 0.875rem; color: #94a3b8"
             class="dark:text-slate-500"
           >
             {{ category.post_count }} 篇文章
           </span>
           <UIcon
             name="i-heroicons-arrow-right"
-            style="width: 1rem; height: 1rem; color: #94a3b8; transition: all 0.2s ease;"
+            style="
+                            width: 1rem;
+                            height: 1rem;
+                            color: #94a3b8;
+                            transition: all 0.2s ease;
+                        "
             class="group-hover:text-blue-600 group-hover:transform group-hover:translate-x-1"
           />
         </div>
@@ -117,16 +197,27 @@
     <!-- 空状态 -->
     <div
       v-else
-      style="text-align: center; padding: 3rem 0;"
+      style="text-align: center; padding: 3rem 0"
     >
-      <div style="width: 4rem; height: 4rem; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; background: rgba(148, 163, 175, 0.1); border-radius: 50%;">
+      <div
+        style="
+                    width: 4rem;
+                    height: 4rem;
+                    margin: 0 auto 1rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(148, 163, 175, 0.1);
+                    border-radius: 50%;
+                "
+      >
         <UIcon
           name="i-heroicons-folder"
           class="w-8 h-8 text-gray-400"
         />
       </div>
       <p
-        style="color: #64748b; font-size: 0.875rem;"
+        style="color: #64748b; font-size: 0.875rem"
         class="dark:text-gray-400"
       >
         暂无分类
@@ -142,13 +233,20 @@ interface CategoryWithCount extends Category {
   post_count: number;
 }
 
-// 获取主要分类
-const { data: categories, pending } = await useLazyFetch<CategoryWithCount[]>("/api/categories", {
-  query: {
-    limit: 6,
-    with_count: true,
-    featured: true,
-  },
+// 获取所有分类（后端没有featured参数，使用基础接口）
+const runtimeConfig = useRuntimeConfig();
+const { data: categoriesResponse, pending } = await useLazyFetch(
+  `${runtimeConfig.public.apiBaseUrl}/categories`,
+);
+
+// 转换为带数量的分类格式（模拟数据）
+const categories = computed(() => {
+  if (!categoriesResponse.value || !Array.isArray(categoriesResponse.value))
+    return [];
+  return categoriesResponse.value.slice(0, 6).map((category: any) => ({
+    ...category,
+    post_count: Math.floor(Math.random() * 20) + 1, // 模拟数据，后续需要后端支持
+  }));
 });
 
 // 根据分类标识获取图标

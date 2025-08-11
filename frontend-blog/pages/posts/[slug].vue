@@ -25,11 +25,13 @@
           name="i-heroicons-exclamation-triangle"
           class="w-16 h-16 text-red-500 mx-auto mb-4"
         />
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-2"
+        >
           文章加载失败
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mb-6">
-          {{ error.message || '未知错误' }}
+          {{ error.message || "未知错误" }}
         </p>
         <UButton
           to="/posts"
@@ -49,7 +51,9 @@
         <!-- 文章头部 -->
         <header class="mb-8">
           <!-- 面包屑导航 -->
-          <nav class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <nav
+            class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 mb-4"
+          >
             <NuxtLink
               to="/"
               class="hover:text-primary-600"
@@ -66,25 +70,35 @@
               name="i-heroicons-chevron-right"
               class="w-4 h-4"
             />
-            <span class="text-gray-700 dark:text-gray-300">{{ post.title }}</span>
+            <span class="text-gray-700 dark:text-gray-300">{{
+              post.title
+            }}</span>
           </nav>
 
           <!-- 标题 -->
-          <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+          <h1
+            class="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4"
+          >
             {{ post.title }}
           </h1>
 
           <!-- 文章元信息 -->
-          <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+          <div
+            class="flex flex-wrap items-center gap-4 text-sm text-gray-600 dark:text-gray-400"
+          >
             <!-- 作者 -->
             <div class="flex items-center gap-2">
-              <div class="w-8 h-8 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center">
+              <div
+                class="w-8 h-8 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center"
+              >
                 <UIcon
                   name="i-heroicons-user"
                   class="w-4 h-4 text-primary-600 dark:text-primary-400"
                 />
               </div>
-              <span class="font-medium">{{ post.author.username }}</span>
+              <span class="font-medium">{{
+                post.author.username
+              }}</span>
             </div>
 
             <!-- 发布时间 -->
@@ -93,7 +107,9 @@
                 name="i-heroicons-clock"
                 class="w-4 h-4"
               />
-              <span>{{ formatDate(post.published_at || post.created_at) }}</span>
+              <span>{{
+                formatDate(post.published_at || post.created_at)
+              }}</span>
             </div>
 
             <!-- 阅读时间 -->
@@ -140,9 +156,9 @@
         </header>
 
         <!-- 文章内容区域 -->
-        <div class="lg:flex lg:gap-8">
+        <div class="md:flex md:gap-8">
           <!-- 主内容区 -->
-          <main class="lg:flex-1 min-w-0">
+          <main class="md:flex-1 min-w-0">
             <!-- 文章封面 -->
             <div
               v-if="post.thumbnail"
@@ -172,9 +188,13 @@
             </div>
 
             <!-- 文章底部信息 -->
-            <footer class="border-t border-gray-200 dark:border-gray-700 pt-8">
+            <footer
+              class="border-t border-gray-200 dark:border-gray-700 pt-8"
+            >
               <div class="flex items-center justify-between">
-                <div class="text-sm text-gray-500 dark:text-gray-400">
+                <div
+                  class="text-sm text-gray-500 dark:text-gray-400"
+                >
                   最后更新于 {{ formatDate(post.updated_at) }}
                 </div>
 
@@ -202,11 +222,15 @@
           </main>
 
           <!-- 侧边栏 -->
-          <aside class="lg:w-64 mt-8 lg:mt-0">
+          <aside class="md:w-64 mt-8 md:mt-0">
             <!-- 目录 -->
             <div class="sticky top-8 space-y-6">
-              <div class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <div
+                class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+              >
+                <h3
+                  class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center"
+                >
                   <UIcon
                     name="i-heroicons-list-bullet"
                     class="w-5 h-5 mr-2"
@@ -214,6 +238,15 @@
                   文章目录
                 </h3>
                 <TocTree :items="toc" />
+                <div
+                  v-if="toc.length === 0"
+                  class="text-gray-500 text-sm"
+                >
+                  目录数据为空 (调试信息)
+                </div>
+                <div class="text-xs text-gray-400 mt-2">
+                  目录项数量: {{ toc.length }}
+                </div>
               </div>
 
               <!-- 相关文章 -->
@@ -221,7 +254,9 @@
                 v-if="relatedPosts?.length"
                 class="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
               >
-                <h3 class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <h3
+                  class="font-semibold text-gray-900 dark:text-white mb-4 flex items-center"
+                >
                   <UIcon
                     name="i-heroicons-document-duplicate"
                     class="w-5 h-5 mr-2"
@@ -235,11 +270,20 @@
                     :to="`/posts/${relatedPost.slug}`"
                     class="block p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    <h4 class="font-medium text-sm text-gray-900 dark:text-white line-clamp-2">
+                    <h4
+                      class="font-medium text-sm text-gray-900 dark:text-white line-clamp-2"
+                    >
                       {{ relatedPost.title }}
                     </h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {{ formatDate(relatedPost.published_at || relatedPost.created_at) }}
+                    <p
+                      class="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                    >
+                      {{
+                        formatDate(
+                          relatedPost.published_at
+                            || relatedPost.created_at,
+                        )
+                      }}
                     </p>
                   </NuxtLink>
                 </div>
@@ -260,7 +304,9 @@
           name="i-heroicons-document-text"
           class="w-16 h-16 text-gray-400 mx-auto mb-4"
         />
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1
+          class="text-2xl font-bold text-gray-900 dark:text-white mb-2"
+        >
           文章不存在
         </h1>
         <p class="text-gray-600 dark:text-gray-400 mb-6">
@@ -289,7 +335,11 @@ const slug = route.params.slug as string;
 const api = useApi();
 
 // 使用 useLazyAsyncData 获取文章数据
-const { data: post, pending, error } = await useLazyAsyncData(
+const {
+  data: post,
+  pending,
+  error,
+} = await useLazyAsyncData(
   `post-${slug}`,
   async () => {
     const response = await api.getPost(slug);
@@ -314,7 +364,11 @@ const { data: relatedPosts } = await useLazyAsyncData(
   `related-posts-${slug}`,
   async () => {
     // 只有在主文章加载完成且有分类信息时才获取相关文章
-    if (!post.value || !post.value.categories || post.value.categories.length === 0) {
+    if (
+      !post.value
+      || !post.value.categories
+      || post.value.categories.length === 0
+    ) {
       return [];
     }
 
@@ -348,12 +402,16 @@ const readingTime = computed(() => {
 });
 
 // 使用 Markdown 渲染器获取目录
-const { render } = useMarkdown();
+const { render } = useMarkdown({ toc: true });
 const toc = computed(() => {
-  if (!post.value?.content) return [];
+  if (!post.value?.content) {
+    console.log("页面TOC: 没有文章内容");
+    return [];
+  }
 
   try {
     const result = render(post.value.content);
+    console.log("页面TOC: 提取结果", result.toc);
     return result.toc;
   }
   catch (error) {
@@ -385,7 +443,9 @@ const sharePost = async () => {
     if (navigator.share) {
       await navigator.share({
         title: post.value.title,
-        text: post.value.excerpt || `来自 ZincBloom 的文章：${post.value.title}`,
+        text:
+                    post.value.excerpt
+                    || `来自 ZincBloom 的文章：${post.value.title}`,
         url: window.location.href,
       });
     }
@@ -421,19 +481,46 @@ watchEffect(() => {
     useHead({
       title: post.value.title,
       meta: [
-        { name: "description", content: post.value.excerpt || `来自 ZincBloom 的文章：${post.value.title}` },
+        {
+          name: "description",
+          content:
+                        post.value.excerpt
+                        || `来自 ZincBloom 的文章：${post.value.title}`,
+        },
         { property: "og:title", content: post.value.title },
-        { property: "og:description", content: post.value.excerpt || `来自 ZincBloom 的文章：${post.value.title}` },
-        { property: "og:image", content: post.value.thumbnail || "/og-image.jpg" },
+        {
+          property: "og:description",
+          content:
+                        post.value.excerpt
+                        || `来自 ZincBloom 的文章：${post.value.title}`,
+        },
+        {
+          property: "og:image",
+          content: post.value.thumbnail || "/og-image.jpg",
+        },
         { property: "og:type", content: "article" },
         { property: "og:url", content: window.location.href },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:title", content: post.value.title },
-        { name: "twitter:description", content: post.value.excerpt || `来自 ZincBloom 的文章：${post.value.title}` },
-        { name: "twitter:image", content: post.value.thumbnail || "/og-image.jpg" },
+        {
+          name: "twitter:description",
+          content:
+                        post.value.excerpt
+                        || `来自 ZincBloom 的文章：${post.value.title}`,
+        },
+        {
+          name: "twitter:image",
+          content: post.value.thumbnail || "/og-image.jpg",
+        },
         { name: "article:author", content: post.value.author.username },
-        { name: "article:published_time", content: post.value.published_at || post.value.created_at },
-        { name: "article:modified_time", content: post.value.updated_at },
+        {
+          name: "article:published_time",
+          content: post.value.published_at || post.value.created_at,
+        },
+        {
+          name: "article:modified_time",
+          content: post.value.updated_at,
+        },
       ],
     });
   }
@@ -442,10 +529,10 @@ watchEffect(() => {
 
 <style scoped>
 .line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 </style>

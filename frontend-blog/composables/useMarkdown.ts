@@ -12,6 +12,7 @@ interface MarkdownOptions {
   highlight?: boolean;
   anchor?: boolean;
   toc?: boolean;
+  insertTocMarker?: boolean; // 是否在HTML中插入TOC标记
 }
 
 interface TocItem {
@@ -52,11 +53,7 @@ function createMarkdownInstance(options: MarkdownOptions = {}): MarkdownIt {
   if (options.anchor !== false) {
     md.use(anchor, {
       permalink: anchor.permalink.linkInsideHeader({
-        symbol: `
-          <svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"></path>
-          </svg>
-        `,
+        symbol: "#",
         placement: "before",
       }),
       level: [1, 2, 3, 4, 5, 6],
@@ -64,15 +61,17 @@ function createMarkdownInstance(options: MarkdownOptions = {}): MarkdownIt {
     });
   }
 
-  // 添加目录插件
+  // 添加目录插件 - 只用于提取目录数据，不在HTML中插入
   if (options.toc !== false) {
     md.use(toc, {
       includeLevel: [1, 2, 3, 4, 5, 6],
       containerClass: "table-of-contents",
       slugify: (s: string) => s.toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]+/g, ""),
-      markerPattern: /^\[\[toc\]\]/im,
+      markerPattern: /^\[\[toc\]\]/im, // 只有明确标记才插入HTML
       listType: "ul",
       format: (anchor: string, html: string) => html,
+      transformContainerOpen: () => "", // 不渲染容器开始标签
+      transformContainerClose: () => "", // 不渲染容器结束标签
     });
   }
 

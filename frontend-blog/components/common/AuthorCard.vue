@@ -3,7 +3,11 @@
     <div class="modern-sidebar-header">
       <div
         class="modern-gradient-icon"
-        style="background: linear-gradient(45deg, #8b5cf6, #a855f7); width: 1.5rem; height: 1.5rem;"
+        style="
+                    background: linear-gradient(45deg, #8b5cf6, #a855f7);
+                    width: 1.5rem;
+                    height: 1.5rem;
+                "
       >
         <UIcon
           name="i-heroicons-users"
@@ -63,7 +67,9 @@
         <!-- 作者信息 -->
         <div class="flex-1 min-w-0">
           <div class="flex items-center space-x-2">
-            <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
+            <p
+              class="text-sm font-medium text-gray-900 dark:text-white truncate"
+            >
               {{ author.username }}
             </p>
             <UBadge
@@ -129,18 +135,19 @@ interface AuthorWithStats extends User {
   is_online?: boolean;
 }
 
-// 获取活跃作者
-const { data: authors, pending } = await useLazyFetch<AuthorWithStats[]>("/api/authors/active", {
-  query: {
-    limit: 5,
-    with_stats: true,
-  },
-});
+// 暂时使用模拟数据（后端没有作者相关接口）
+const authors = ref<AuthorWithStats[]>([]);
+const pending = ref(false);
+
+// TODO: 后续后端添加作者管理接口后再连接
+// const runtimeConfig = useRuntimeConfig();
+// const { data: authors, pending } = await useLazyFetch<AuthorWithStats[]>(`${runtimeConfig.public.apiBaseUrl}/authors/active`);
 </script>
 
 <style scoped>
 /* 确保卡片在悬停时有微妙的阴影效果 */
 .author-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 </style>

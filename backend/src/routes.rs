@@ -46,6 +46,8 @@ use crate::handlers::{
 };
 use axum::Router;
 use axum::routing::{delete, get, post, put};
+use tower_http::cors::CorsLayer;
+use axum::http::Method;
 
 pub fn create_router(app_state: AppState) -> Router {
     Router::new()
@@ -196,5 +198,21 @@ pub fn create_router(app_state: AppState) -> Router {
             post(merge_tags_enhanced_handler),
         )
         .route("/admin/tags/merge-preview", post(get_merge_preview_handler))
+        // 添加CORS支持
+        .layer(
+            CorsLayer::new()
+                .allow_origin([
+                    "http://localhost:3000".parse().unwrap(), // 博客前端
+                    "http://localhost:3002".parse().unwrap(), // 博客前端（备用端口）
+                    "http://localhost:5173".parse().unwrap(), // 管理面板前端
+                ])
+                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+                .allow_headers([
+                    "content-type".parse().unwrap(),
+                    "authorization".parse().unwrap(),
+                    "accept".parse().unwrap(),
+                ])
+                .allow_credentials(true)
+        )
         .with_state(app_state) // 将共享状态注入路由
 }

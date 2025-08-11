@@ -1,21 +1,6 @@
 <template>
   <div class="markdown-renderer">
-    <!-- 目录 -->
-    <div
-      v-if="showToc && toc.length > 0"
-      class="toc-container mb-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-    >
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-        <UIcon
-          name="i-heroicons-list-bullet"
-          class="w-5 h-5 mr-2"
-        />
-        文章目录
-      </h3>
-      <nav class="toc-nav">
-        <TocTree :items="toc" />
-      </nav>
-    </div>
+    <!-- 目录已完全移除 -->
 
     <!-- Markdown 内容 -->
     <div
@@ -76,15 +61,28 @@ const props = withDefaults(defineProps<Props>(), {
   options: () => ({}),
 });
 
-// 使用 Markdown 渲染
-const { render } = useMarkdown(props.options);
-
 // 渲染结果
 const renderedHtml = computed(() => {
   if (!props.content || props.loading) return "";
 
   try {
+    // 根据showToc动态配置markdown选项
+    const options = {
+      ...props.options,
+      toc: props.showToc, // 只有在showToc为true时才启用目录插件
+    };
+
+    const { render } = useMarkdown(options);
     const result = render(props.content);
+
+    // 如果不显示目录，则从HTML中移除所有目录相关元素
+    if (!props.showToc && result.html) {
+      const cleanHtml = result.html;
+
+      // HTML内容本身是干净的，无需额外清理
+      return cleanHtml;
+    }
+
     return result.html;
   }
   catch (error) {
@@ -93,18 +91,9 @@ const renderedHtml = computed(() => {
   }
 });
 
-// 目录数据
+// 目录数据 - 强制返回空数组
 const toc = computed(() => {
-  if (!props.content || props.loading) return [];
-
-  try {
-    const result = render(props.content);
-    return result.toc;
-  }
-  catch (error) {
-    console.error("目录提取失败:", error);
-    return [];
-  }
+  return []; // 强制禁用目录
 });
 </script>
 
@@ -140,6 +129,14 @@ const toc = computed(() => {
 /* Markdown 内容样式 */
 .markdown-content {
   line-height: 1.625;
+}
+
+/* 隐藏markdown-it-table-of-contents插件生成的目录 */
+.markdown-content .table-of-contents,
+.markdown-content div[class*="table-of-contents"],
+.markdown-content nav[class*="table-of-contents"],
+.markdown-content ul[class*="table-of-contents"] {
+  display: none !important;
 }
 
 .markdown-content h1,

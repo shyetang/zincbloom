@@ -2,7 +2,6 @@
 
 // import path from "node:path";
 export default defineNuxtConfig({
-
   // 模块配置
   modules: [
     "@nuxt/eslint",
@@ -17,7 +16,11 @@ export default defineNuxtConfig({
   ssr: true,
   devtools: { enabled: true },
 
-  // UI 配置（移除不支持的配置）
+  // UI 配置（移除不支持的配置选项）
+  // ui: {
+  //     global: true,
+  //     icons: ["heroicons"],
+  // },
 
   // 应用配置
   app: {
@@ -53,16 +56,8 @@ export default defineNuxtConfig({
 
   compatibilityDate: "2025-05-15",
 
-  // Nitro 配置（包含开发代理）
+  // Nitro 配置
   nitro: {
-    // 开发时的代理配置
-    devProxy: {
-      "/api": {
-        target: "http://localhost:8080",
-        changeOrigin: true,
-        prependPath: false,
-      },
-    },
     compressPublicAssets: true,
     // 减少构建警告
     rollupConfig: {
