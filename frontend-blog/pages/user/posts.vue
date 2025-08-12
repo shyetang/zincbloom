@@ -390,7 +390,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Post } from "~/types";
+import type { Post, PaginatedResponse } from "~/types";
 
 // 路由守卫
 definePageMeta({
@@ -428,7 +428,10 @@ const sortOptions = [
 ];
 
 // 获取文章数据
-const posts = ref({
+const posts = ref<{
+  data: Post[];
+  pagination: { page: number; per_page: number; total: number; total_pages: number };
+}>({
   data: [],
   pagination: { page: 1, per_page: 10, total: 0, total_pages: 0 },
 });
@@ -449,7 +452,7 @@ const fetchPosts = async () => {
     const queryString = params.toString();
     const url = queryString ? `/posts?${queryString}` : "/posts";
 
-    const response = await $fetch<any>(`http://localhost:8080${url}`, {
+    const response = await $fetch<PaginatedResponse<Post>>(`http://localhost:8080${url}`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
@@ -569,10 +572,10 @@ const togglePostStatus = async (post: Post) => {
       throw new Error(response.error?.message || "更新失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
     toast.add({
       title: "操作失败",
-      description: error.message || "更新文章状态时发生错误",
+      description: error instanceof Error ? error.message : "更新文章状态时发生错误",
       color: "error",
     });
   }
@@ -600,10 +603,10 @@ const deletePost = async (post: Post) => {
       throw new Error(response.error?.message || "删除失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
     toast.add({
       title: "删除失败",
-      description: error.message || "删除文章时发生错误",
+      description: error instanceof Error ? error.message : "删除文章时发生错误",
       color: "error",
     });
   }
@@ -634,10 +637,10 @@ const bulkPublish = async () => {
       throw new Error(response.error?.message || "批量操作失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
     toast.add({
       title: "批量操作失败",
-      description: error.message || "批量发布时发生错误",
+      description: error instanceof Error ? error.message : "批量发布时发生错误",
       color: "error",
     });
   }
@@ -671,10 +674,10 @@ const bulkDraft = async () => {
       throw new Error(response.error?.message || "批量操作失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
     toast.add({
       title: "批量操作失败",
-      description: error.message || "批量转草稿时发生错误",
+      description: error instanceof Error ? error.message : "批量转草稿时发生错误",
       color: "error",
     });
   }
@@ -712,10 +715,10 @@ const bulkDelete = async () => {
       throw new Error(response.error?.message || "批量操作失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
     toast.add({
       title: "批量操作失败",
-      description: error.message || "批量删除时发生错误",
+      description: error instanceof Error ? error.message : "批量删除时发生错误",
       color: "error",
     });
   }
@@ -748,6 +751,7 @@ watch([statusFilter, sortBy], () => {
 .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

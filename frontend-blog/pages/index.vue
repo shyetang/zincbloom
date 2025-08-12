@@ -493,7 +493,6 @@ useHead({
   ],
 });
 
-const apiClient = useApi();
 const runtimeConfig = useRuntimeConfig();
 
 // 定义后端响应类型

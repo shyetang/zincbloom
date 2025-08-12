@@ -220,7 +220,7 @@ interface SiteStats {
 }
 
 // 由于后端没有统计接口，暂时使用模拟数据
-const stats = ref({
+const stats = ref<SiteStats>({
   total_posts: 0,
   total_users: 0,
   total_tags: 0,

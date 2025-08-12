@@ -11,7 +11,6 @@ import type {
   User,
   BackendPostsResponse,
   PostsResponse,
-  PaginatedResponse,
   FrontendPaginatedResponse,
   PostQueryParams,
   CategoryQueryParams,
@@ -22,7 +21,6 @@ import { API_ENDPOINTS, ERROR_CODES, STORAGE_KEYS } from "~/types";
 import {
   transformPost,
   transformPostsResponse,
-  transformPaginatedResponse,
   buildQueryString,
 } from "~/utils/dataTransform";
 
@@ -361,7 +359,16 @@ class ApiClient {
     published_at?: string;
   }): Promise<ApiResponse<Post>> {
     // 转换前端字段到后端字段
-    const payload: any = {};
+    const payload: {
+      title?: string;
+      content?: string;
+      excerpt?: string;
+      thumbnail?: string;
+      category_ids?: string[];
+      tag_ids?: string[];
+      published_at?: string;
+      unpublish?: boolean;
+    } = {};
 
     if (data.title !== undefined) payload.title = data.title;
     if (data.content_markdown !== undefined) payload.content = data.content_markdown;

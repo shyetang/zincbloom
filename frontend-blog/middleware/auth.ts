@@ -1,4 +1,4 @@
-export default defineNuxtRouteMiddleware(async (to, from) => {
+export default defineNuxtRouteMiddleware(async (_to, _from) => {
   // 在服务器端跳过认证检查
   if (import.meta.server) {
     return;

@@ -212,13 +212,12 @@ const handleSubmit = async () => {
     else {
       toast.add({
         title: "注册失败",
-        description:
-                    (result as any).error?.message || "注册过程中发生错误",
+        description: result.message || "注册过程中发生错误",
         color: "error",
       });
     }
   }
-  catch (error) {
+  catch {
     toast.add({
       title: "注册失败",
       description: "网络错误，请稍后重试",

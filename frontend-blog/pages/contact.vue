@@ -92,6 +92,7 @@ const handleSubmit = async () => {
     form.message = "";
   }
   catch (error) {
+    console.error("Contact form submission failed:", error);
     toast.add({
       title: "发送失败",
       description: "消息发送失败，请稍后重试",

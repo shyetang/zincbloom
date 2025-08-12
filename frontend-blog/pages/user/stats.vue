@@ -23,7 +23,7 @@
             我的
             <span
               class="modern-text-gradient"
-              style="font-weight: 800; background: linear-gradient(45deg, #8b5cf6, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+              style="font-weight: 800; background: linear-gradient(45deg, #8b5cf6, #a855f7); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;"
             >统计</span>
           </h1>
 
@@ -521,9 +521,6 @@ interface UserStats {
     date: string;
   }[];
 }
-
-// API 客户端
-const api = useApi();
 
 // 获取统计数据
 const {

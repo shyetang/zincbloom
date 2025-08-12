@@ -1,5 +1,6 @@
 // 认证状态管理
 import type { User, LoginCredentials, RegisterData } from "~/types";
+import { STORAGE_KEYS, USER_ROLES, PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "~/types";
 
 interface AuthState {
   user: User | null;
@@ -8,36 +9,6 @@ interface AuthState {
   error: string | null;
   permissions: string[];
 }
-
-// 使用常量
-const storageKeys = {
-  ACCESS_TOKEN: "access_token",
-  REFRESH_TOKEN: "refresh_token",
-  USER: "user",
-} as const;
-
-const userRoles = {
-  ADMIN: "admin",
-  MODERATOR: "moderator",
-  AUTHOR: "author",
-  USER: "user",
-} as const;
-
-const permissionActions = {
-  CREATE: "create",
-  READ: "read",
-  UPDATE: "update",
-  DELETE: "delete",
-  PUBLISH: "publish",
-  BAN: "ban",
-} as const;
-
-const permissionResources = {
-  POST: "post",
-  CATEGORY: "category",
-  TAG: "tag",
-  USER: "user",
-} as const;
 
 export const useAuthStore = defineStore("auth", {
   state: (): AuthState => ({
@@ -50,21 +21,21 @@ export const useAuthStore = defineStore("auth", {
 
   getters: {
     // 检查用户是否有特定角色
-    hasRole: state => (role: keyof typeof userRoles) => {
-      return state.user?.roles?.includes(userRoles[role]) ?? false;
+    hasRole: state => (role: keyof typeof USER_ROLES) => {
+      return state.user?.roles?.includes(USER_ROLES[role]) ?? false;
     },
 
     // 检查用户是否为管理员
     isAdmin: (state) => {
-      return state.user?.roles?.includes(userRoles.ADMIN) ?? false;
+      return state.user?.roles?.includes(USER_ROLES.ADMIN) ?? false;
     },
 
     // 检查用户是否为作者
     isAuthor: (state) => {
       return (
-        state.user?.roles?.includes(userRoles.AUTHOR)
-        || state.user?.roles?.includes(userRoles.ADMIN)
-        || state.user?.roles?.includes(userRoles.MODERATOR)
+        state.user?.roles?.includes(USER_ROLES.AUTHOR)
+        || state.user?.roles?.includes(USER_ROLES.ADMIN)
+        || state.user?.roles?.includes(USER_ROLES.MODERATOR)
       );
     },
 
@@ -72,10 +43,10 @@ export const useAuthStore = defineStore("auth", {
     hasPermission:
             state =>
               (
-                resource: keyof typeof permissionResources,
-                action: keyof typeof permissionActions,
+                resource: keyof typeof PERMISSION_RESOURCES,
+                action: keyof typeof PERMISSION_ACTIONS,
               ) => {
-                const permission = `${permissionResources[resource]}:${permissionActions[action]}`;
+                const permission = `${PERMISSION_RESOURCES[resource]}:${PERMISSION_ACTIONS[action]}`;
                 return state.permissions.includes(permission);
               },
 
@@ -97,8 +68,8 @@ export const useAuthStore = defineStore("auth", {
       this.error = null;
 
       try {
-        const token = localStorage.getItem(storageKeys.ACCESS_TOKEN);
-        const userStr = localStorage.getItem(storageKeys.USER);
+        const token = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        const userStr = localStorage.getItem(STORAGE_KEYS.USER);
 
         if (token && userStr) {
           const user = JSON.parse(userStr);
@@ -225,11 +196,11 @@ export const useAuthStore = defineStore("auth", {
 
       // 保存到本地存储（仅在客户端）
       if (typeof window !== "undefined") {
-        localStorage.setItem(storageKeys.ACCESS_TOKEN, accessToken);
-        localStorage.setItem(storageKeys.USER, JSON.stringify(user));
+        localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
 
         if (refreshToken) {
-          localStorage.setItem(storageKeys.REFRESH_TOKEN, refreshToken);
+          localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
         }
       }
 
@@ -246,9 +217,9 @@ export const useAuthStore = defineStore("auth", {
 
       // 清除本地存储（仅在客户端）
       if (typeof window !== "undefined") {
-        localStorage.removeItem(storageKeys.ACCESS_TOKEN);
-        localStorage.removeItem(storageKeys.REFRESH_TOKEN);
-        localStorage.removeItem(storageKeys.USER);
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
 
         // 检查是否需要保留记住的凭据
         const remembered = localStorage.getItem("rememberedCredentials");
@@ -314,7 +285,7 @@ export const useAuthStore = defineStore("auth", {
 
       try {
         const refreshToken = localStorage.getItem(
-          storageKeys.REFRESH_TOKEN,
+          STORAGE_KEYS.REFRESH_TOKEN,
         );
         if (!refreshToken) {
           throw new Error("没有刷新令牌");

@@ -85,9 +85,9 @@ const { data: tagsResponse, pending } = await useLazyFetch(
 );
 
 // 转换为带数量的标签格式（模拟数据）
-const tags = computed(() => {
+const tags = computed((): TagWithCount[] => {
   if (!tagsResponse.value || !Array.isArray(tagsResponse.value)) return [];
-  return tagsResponse.value.slice(0, 15).map((tag: any) => ({
+  return tagsResponse.value.slice(0, 15).map((tag: Tag): TagWithCount => ({
     ...tag,
     post_count: Math.floor(Math.random() * 10) + 1, // 模拟数据，后续需要后端支持
   }));

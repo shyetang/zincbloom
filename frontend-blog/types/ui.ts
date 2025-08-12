@@ -7,13 +7,6 @@ export interface DropdownItem {
   click?: () => void;
 }
 
-export interface FormSubmitEvent<T = any> {
+export interface FormSubmitEvent<T = Record<string, unknown>> {
   data: T;
-}
-
-// 导出类型供组件使用
-declare global {
-  interface FormSubmitEvent<T = any> {
-    data: T;
-  }
 }

@@ -23,7 +23,7 @@
             帮助
             <span
               class="modern-text-gradient"
-              style="font-weight: 800; background: linear-gradient(45deg, #10b981, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+              style="font-weight: 800; background: linear-gradient(45deg, #10b981, #059669); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;"
             >中心</span>
           </h1>
 
@@ -167,7 +167,7 @@
                 >
                   <div
                     class="text-slate-600 dark:text-slate-400 leading-relaxed prose prose-sm max-w-none"
-                    v-html="faq.answer"
+                    v-text="faq.answer"
                   />
 
                   <div
@@ -266,7 +266,6 @@ useHead({
 // 状态管理
 const searchQuery = ref("");
 const expandedFAQ = ref<string | null>(null);
-const filteredFAQs = ref<any[]>([]);
 
 // 帮助分类
 const helpCategories = [

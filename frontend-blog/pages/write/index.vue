@@ -454,13 +454,18 @@ const toast = useToast();
 const apiClient = useApi();
 
 // 获取草稿数据
-const recentDrafts = ref({ data: [] as any[] });
-const stats = ref({
+const recentDrafts = ref<{ data: Array<{ id: string; title: string; content: string; created_at: string; updated_at: string }> }>({ data: [] });
+const stats = ref<{
+  totalPosts: number;
+  publishedPosts: number;
+  draftPosts: number;
+  totalWords: number;
+}>({
   totalPosts: 0,
   publishedPosts: 0,
   draftPosts: 0,
   totalWords: 0,
-} as any);
+});
 
 // 加载数据
 onMounted(async () => {
@@ -478,7 +483,12 @@ onMounted(async () => {
     }
 
     // 获取统计数据
-    const statsResponse = await $fetch("http://localhost:8080/me/stats", {
+    const statsResponse = await $fetch<{
+      totalPosts: number;
+      publishedPosts: number;
+      draftPosts: number;
+      totalWords: number;
+    }>("http://localhost:8080/me/stats", {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("access_token")}`,
       },
@@ -491,7 +501,7 @@ onMounted(async () => {
 });
 
 // 计算草稿数量
-const draftCount = computed(() => (stats.value as any)?.draftPosts || 0);
+const draftCount = computed(() => stats.value?.draftPosts || 0);
 
 // 方法
 const createNewPost = async () => {
@@ -527,7 +537,7 @@ const createNewPost = async () => {
 
 const getExcerpt = (content: string): string => {
   if (!content) return "空白草稿";
-  const plainText = content.replace(/[#*`\[\]]/g, "").trim();
+  const plainText = content.replace(/[#*`[\]]/g, "").trim();
   return plainText.length > 100
     ? plainText.substring(0, 100) + "..."
     : plainText;
@@ -555,6 +565,7 @@ const formatDate = (dateString: string): string => {
 .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

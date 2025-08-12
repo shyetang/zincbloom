@@ -87,7 +87,7 @@
                   v-else
                   :src="authorInfo.avatar"
                   :alt="authorInfo.username"
-                  style="width: 100%; height: 100%; object-cover;"
+                  style="width: 100%; height: 100%; object-fit: cover;"
                 >
               </div>
             </div>
@@ -389,7 +389,7 @@
 </template>
 
 <script setup lang="ts">
-import type { PostQueryParams, AuthorStats } from "~/types";
+import type { PostQueryParams } from "~/types";
 
 // 获取路由参数
 const route = useRoute();

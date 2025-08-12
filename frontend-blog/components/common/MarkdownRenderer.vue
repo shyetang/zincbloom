@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-v-html -->
 <template>
   <div class="markdown-renderer">
     <!-- 目录已完全移除 -->
@@ -37,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import TocTree from "~/components/common/TocTree.vue";
+// import TocTree from "~/components/common/TocTree.vue"; // 暂时未使用
 
 interface Props {
   content?: string;
@@ -91,8 +92,8 @@ const renderedHtml = computed(() => {
   }
 });
 
-// 目录数据 - 强制返回空数组
-const toc = computed(() => {
+// 目录数据 - 强制返回空数组（暂时未使用）
+const _toc = computed(() => {
   return []; // 强制禁用目录
 });
 </script>

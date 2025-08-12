@@ -226,8 +226,8 @@ const handleLogout = async () => {
   }
 };
 
-// 用户菜单项
-const userMenuItems = computed(() => [
+// 用户菜单项（预留用于将来的重构）
+const _userMenuItems = computed(() => [
   [
     {
       label: "个人资料",

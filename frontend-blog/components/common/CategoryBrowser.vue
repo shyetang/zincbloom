@@ -158,6 +158,7 @@
                         line-height: 1.5;
                         display: -webkit-box;
                         -webkit-line-clamp: 2;
+                        line-clamp: 2;
                         -webkit-box-orient: vertical;
                         overflow: hidden;
                     "
@@ -240,10 +241,10 @@ const { data: categoriesResponse, pending } = await useLazyFetch(
 );
 
 // 转换为带数量的分类格式（模拟数据）
-const categories = computed(() => {
+const categories = computed((): CategoryWithCount[] => {
   if (!categoriesResponse.value || !Array.isArray(categoriesResponse.value))
     return [];
-  return categoriesResponse.value.slice(0, 6).map((category: any) => ({
+  return categoriesResponse.value.slice(0, 6).map((category: Category): CategoryWithCount => ({
     ...category,
     post_count: Math.floor(Math.random() * 20) + 1, // 模拟数据，后续需要后端支持
   }));

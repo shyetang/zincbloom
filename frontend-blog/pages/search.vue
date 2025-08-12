@@ -576,7 +576,7 @@ const filteredPosts = computed(() => {
       case "title":
         return a.title.localeCompare(b.title);
       case "relevance":
-      default:
+      default: {
         // 简单的相关性排序：标题包含关键词的排在前面
         const queryLower = currentSearchQuery.value.toLowerCase();
         const aRelevant = a.title.toLowerCase().includes(queryLower);
@@ -584,6 +584,7 @@ const filteredPosts = computed(() => {
         if (aRelevant && !bRelevant) return -1;
         if (!aRelevant && bRelevant) return 1;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
     }
   });
 

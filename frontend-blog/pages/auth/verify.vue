@@ -164,7 +164,14 @@ const resending = ref(false);
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
-const api = useApi();
+
+// 验证响应类型
+interface VerifyResponse {
+  success: boolean;
+  error?: {
+    message: string;
+  };
+}
 
 // 检查是否有验证token
 const token = route.query.token as string;
@@ -179,7 +186,7 @@ if (token) {
 async function verifyEmail(verificationToken: string) {
   try {
     const runtimeConfig = useRuntimeConfig();
-    const response = await $fetch(
+    const response = await $fetch<VerifyResponse>(
       `${runtimeConfig.public.apiBaseUrl}/auth/verify-email`,
       {
         method: "POST",
@@ -187,7 +194,7 @@ async function verifyEmail(verificationToken: string) {
       },
     );
 
-    if ((response as any).success) {
+    if (response.success) {
       verificationStatus.value = "success";
       toast.add({
         title: "验证成功",
@@ -197,11 +204,10 @@ async function verifyEmail(verificationToken: string) {
     }
     else {
       verificationStatus.value = "error";
-      errorMessage.value
-                = (response as any).error?.message || "验证失败，请重试";
+      errorMessage.value = response.error?.message || "验证失败，请重试";
     }
   }
-  catch (error) {
+  catch {
     verificationStatus.value = "error";
     errorMessage.value = "网络错误，请稍后重试";
   }
@@ -222,7 +228,7 @@ async function resendVerification() {
       color: "success",
     });
   }
-  catch (error) {
+  catch {
     toast.add({
       title: "发送失败",
       description: "无法发送验证邮件，请稍后重试",

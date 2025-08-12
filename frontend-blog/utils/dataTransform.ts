@@ -65,8 +65,11 @@ export function extractExcerpt(content: string, maxLength: number = 200): string
     : plainText;
 }
 
+// 定义查询参数的联合类型
+type QueryParamValue = string | number | boolean | undefined | null;
+
 // API 查询参数转换
-export function transformQueryParams(params: Record<string, any>): Record<string, string> {
+export function transformQueryParams<T extends Record<string, QueryParamValue>>(params: T): Record<string, string> {
   const transformed: Record<string, string> = {};
 
   Object.entries(params).forEach(([key, value]) => {
@@ -85,7 +88,7 @@ export function transformQueryParams(params: Record<string, any>): Record<string
 }
 
 // URL 查询字符串构建
-export function buildQueryString(params: Record<string, any>): string {
+export function buildQueryString<T extends Record<string, QueryParamValue>>(params: T): string {
   const transformedParams = transformQueryParams(params);
   const searchParams = new URLSearchParams(transformedParams);
   return searchParams.toString();

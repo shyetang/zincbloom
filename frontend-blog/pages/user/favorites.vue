@@ -23,7 +23,7 @@
             我的
             <span
               class="modern-text-gradient"
-              style="font-weight: 800; background: linear-gradient(45deg, #ec4899, #f43f5e); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+              style="font-weight: 800; background: linear-gradient(45deg, #ec4899, #f43f5e); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;"
             >收藏</span>
           </h1>
 
@@ -400,7 +400,6 @@ const shareDialogOpen = ref(false);
 const shareUrl = ref("");
 
 // API 客户端
-const api = useApi();
 const toast = useToast();
 
 // 模拟收藏数据（实际应该从 API 获取）
@@ -633,7 +632,7 @@ const copyToClipboard = async () => {
     });
     shareDialogOpen.value = false;
   }
-  catch (error) {
+  catch {
     toast.add({
       title: "复制失败",
       description: "无法复制到剪贴板",

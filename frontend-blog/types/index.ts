@@ -101,6 +101,7 @@ export interface PostQueryParams {
   status?: "draft" | "published";
   sort?: "created_at" | "updated_at" | "published_at" | "title";
   order?: "asc" | "desc";
+  [key: string]: string | number | undefined;
 }
 
 // ===== 分类相关类型 =====
@@ -120,6 +121,7 @@ export interface CategoryQueryParams {
   search?: string;
   sort?: "name" | "created_at" | "post_count";
   order?: "asc" | "desc";
+  [key: string]: string | number | undefined;
 }
 
 // ===== 标签相关类型 =====
@@ -138,6 +140,7 @@ export interface TagQueryParams {
   search?: string;
   sort?: "name" | "created_at" | "post_count";
   order?: "asc" | "desc";
+  [key: string]: string | number | undefined;
 }
 
 // ===== API 响应类型 =====

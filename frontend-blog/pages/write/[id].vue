@@ -546,7 +546,7 @@ const saveAsDraft = async (silent = false) => {
       }
     }
   }
-  catch (error) {
+  catch {
     if (!silent) {
       toast.add({
         title: "保存失败",
@@ -593,7 +593,7 @@ const publishPost = async () => {
       router.push(`/posts/${response.data?.slug || postId}`);
     }
   }
-  catch (error) {
+  catch {
     toast.add({
       title: "发布失败",
       description: "发布文章时发生错误",

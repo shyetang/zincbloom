@@ -106,7 +106,7 @@ interface ErrorProps {
     statusMessage?: string;
     message?: string;
     stack?: string;
-    data?: any;
+    data?: unknown;
   };
 }
 

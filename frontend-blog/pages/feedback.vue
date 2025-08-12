@@ -145,6 +145,7 @@ const handleSubmit = async () => {
     feedbackForm.message = "";
   }
   catch (error) {
+    console.error("Feedback submission failed:", error);
     toast.add({
       title: "提交失败",
       description: "反馈提交失败，请稍后重试",

@@ -199,7 +199,7 @@
                     v-else
                     :src="author.avatar"
                     :alt="author.username"
-                    style="width: 100%; height: 100%; object-cover;"
+                    style="width: 100%; height: 100%; object-fit: cover;"
                   >
                 </div>
               </div>
@@ -336,7 +336,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Author } from "~/types";
+import type { Author, PostWithContent } from "~/types";
 
 // SEO 配置
 useHead({
@@ -383,7 +383,7 @@ const authors = computed((): Author[] => {
     id: string;
     username: string;
     email?: string;
-    posts: any[];
+    posts: PostWithContent[];
     categories: Set<string>;
     tags: Set<string>;
     lastActiveAt: string;

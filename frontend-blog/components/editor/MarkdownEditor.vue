@@ -222,9 +222,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: "update:modelValue", value: string): void;
-  (e: "change", value: string): void;
-  (e: "input", value: string): void;
+  (e: "update:modelValue" | "change" | "input", value: string): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {

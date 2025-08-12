@@ -542,10 +542,11 @@ const updateProfile = async () => {
       throw new Error(response.error?.message || "更新失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "更新个人资料时发生错误";
     toast.add({
       title: "保存失败",
-      description: error.message || "更新个人资料时发生错误",
+      description: errorMessage,
       color: "error",
     });
   }
@@ -580,10 +581,11 @@ const changePassword = async () => {
       throw new Error(response.error?.message || "更改失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "更改密码时发生错误";
     toast.add({
       title: "更改失败",
-      description: error.message || "更改密码时发生错误",
+      description: errorMessage,
       color: "error",
     });
   }
@@ -615,10 +617,11 @@ const updatePreferences = async () => {
       throw new Error(response.error?.message || "保存失败");
     }
   }
-  catch (error: any) {
+  catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "更新设置时发生错误";
     toast.add({
       title: "保存失败",
-      description: error.message || "更新设置时发生错误",
+      description: errorMessage,
       color: "error",
     });
   }
