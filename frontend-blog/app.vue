@@ -4,8 +4,8 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
-    <!-- 全局通知组件 -->
-    <UNotifications />
+    <!-- 移除这行，Nuxt UI v3 会自动处理通知 -->
+    <!-- <UNotifications /> -->
   </div>
 </template>
 

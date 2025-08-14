@@ -16,12 +16,6 @@ export default defineNuxtConfig({
   ssr: true,
   devtools: { enabled: true },
 
-  // UI 配置（移除不支持的配置选项）
-  // ui: {
-  //     global: true,
-  //     icons: ["heroicons"],
-  // },
-
   // 应用配置
   app: {
     head: {
@@ -50,7 +44,7 @@ export default defineNuxtConfig({
     // public keys that are exposed to the client-side
     public: {
       apiBaseUrl:
-                process.env.NUXT_PUBLIC_API_BASE_URL || "http://localhost:8080",
+        process.env.NUXT_PUBLIC_API_BASE_URL || "http://localhost:8080",
     },
   },
 

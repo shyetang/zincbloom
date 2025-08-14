@@ -21,7 +21,7 @@
       leave-to-class="transform opacity-0 scale-95"
     >
       <UButton
-        v-show="showBackToTop"
+        v-show="showBackToTop && mounted"
         icon="i-heroicons-arrow-up"
         size="lg"
         color="primary"
@@ -31,9 +31,9 @@
       />
     </Transition>
 
-    <!-- 页面加载进度条 -->
+    <!-- 页面加载进度条 - 添加 mounted 检查 -->
     <UProgress
-      v-if="$route.meta.showProgress !== false"
+      v-if="mounted && $route.meta.showProgress !== false"
       :model-value="isLoading ? 30 : 100"
       class="fixed top-0 left-0 right-0 z-60 h-1"
       color="primary"
@@ -45,6 +45,7 @@
 // 回到顶部功能
 const showBackToTop = ref(false);
 const isLoading = ref(false);
+const mounted = ref(false);
 
 // 监听页面加载状态
 const nuxtApp = useNuxtApp();
@@ -73,6 +74,7 @@ const scrollToTop = () => {
 
 // 生命周期管理
 onMounted(() => {
+  mounted.value = true;
   window.addEventListener("scroll", handleScroll, { passive: true });
 });
 
@@ -98,7 +100,7 @@ useHead({
 // 默认页面元数据
 useSeoMeta({
   description:
-        "基于 Nuxt 3 和 Rust 构建的现代化博客系统，提供优雅的写作体验和阅读体验。",
+    "基于 Nuxt 3 和 Rust 构建的现代化博客系统，提供优雅的写作体验和阅读体验。",
   ogDescription: "基于 Nuxt 3 和 Rust 构建的现代化博客系统",
   ogImage: "/og-image.jpg",
   ogImageWidth: "1200",
@@ -134,79 +136,79 @@ onMounted(() => {
 <style>
 /* 全局样式优化 */
 html {
-    scroll-behavior: smooth;
+  scroll-behavior: smooth;
 }
 
 /* 自定义滚动条样式 */
 ::-webkit-scrollbar {
-    width: 8px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background-color: rgb(243 244 246);
+  background-color: rgb(243 244 246);
 }
 
 .dark ::-webkit-scrollbar-track {
-    background-color: rgb(31 41 55);
+  background-color: rgb(31 41 55);
 }
 
 ::-webkit-scrollbar-thumb {
-    background-color: rgb(156 163 175);
-    border-radius: 9999px;
+  background-color: rgb(156 163 175);
+  border-radius: 9999px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-    background-color: rgb(75 85 99);
+  background-color: rgb(75 85 99);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(107 114 128);
+  background-color: rgb(107 114 128);
 }
 
 /* 选择文本的颜色 */
 ::selection {
-    background-color: rgb(219 234 254);
-    color: rgb(30 58 138);
+  background-color: rgb(219 234 254);
+  color: rgb(30 58 138);
 }
 
 /* 深色模式下的选择文本颜色 */
 .dark ::selection {
-    background-color: rgb(30 58 138);
-    color: rgb(219 234 254);
+  background-color: rgb(30 58 138);
+  color: rgb(219 234 254);
 }
 
 /* 焦点状态优化 */
 *:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(255 255 255);
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(255 255 255);
 }
 
 .dark *:focus-visible {
-    box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(17 24 39);
+  box-shadow: 0 0 0 2px rgb(59 130 246), 0 0 0 4px rgb(17 24 39);
 }
 
 /* 图片加载优化 */
 img {
-    transition: opacity 0.3s;
+  transition: opacity 0.3s;
 }
 
-img[loading="lazy"] {
-    opacity: 0;
+img[loading='lazy'] {
+  opacity: 0;
 }
 
-img[loading="lazy"].loaded {
-    opacity: 1;
+img[loading='lazy'].loaded {
+  opacity: 1;
 }
 
 /* 页面过渡动画 */
 .page-enter-active,
 .page-leave-active {
-    transition: all 0.3s ease;
+  transition: all 0.3s ease;
 }
 
 .page-enter-from,
 .page-leave-to {
-    opacity: 0;
-    transform: translateY(10px);
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>

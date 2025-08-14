@@ -1,0 +1,557 @@
+/* 编辑器页面专用样式 - 强制覆盖 */
+
+/* 页面背景 */
+.editor-page {
+  background: linear-gradient(135deg, #f7fafc 0%, #e0f7fa 50%, #e8f5e8 100%) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  min-height: 100vh !important;
+}
+
+.dark .editor-page {
+  background: linear-gradient(135deg, #0f172a 0%, #312e81 30%, #1e3a8a 100%) !important;
+}
+
+/* 浮动装饰球体 */
+.floating-orb {
+  position: absolute !important;
+  border-radius: 50% !important;
+  filter: blur(60px) !important;
+  opacity: 0.6 !important;
+  animation: float-smooth 8s ease-in-out infinite !important;
+}
+
+.floating-orb-purple {
+  top: -10rem !important;
+  right: -10rem !important;
+  width: 20rem !important;
+  height: 20rem !important;
+  background: linear-gradient(45deg, #8b5cf6, #ec4899, #ef4444) !important;
+  animation-delay: 0s !important;
+}
+
+.floating-orb-blue {
+  bottom: -10rem !important;
+  left: -10rem !important;
+  width: 24rem !important;
+  height: 24rem !important;
+  background: linear-gradient(45deg, #3b82f6, #06b6d4, #10b981) !important;
+  animation-delay: -3s !important;
+}
+
+.floating-orb-green {
+  top: 33% !important;
+  left: 25% !important;
+  width: 15rem !important;
+  height: 15rem !important;
+  background: linear-gradient(45deg, #10b981, #84cc16, #eab308) !important;
+  animation-delay: -6s !important;
+}
+
+@keyframes float-smooth {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px) !important;
+  }
+  33% {
+    transform: translateY(-15px) translateX(10px) !important;
+  }
+  66% {
+    transform: translateY(5px) translateX(-5px) !important;
+  }
+}
+
+/* 网格背景 */
+.grid-background {
+  background-image: 
+    linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px) !important;
+  background-size: 30px 30px !important;
+  opacity: 0.4 !important;
+}
+
+/* 顶部光线效果 */
+.top-glow {
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent) !important;
+  height: 1px !important;
+}
+
+/* 毛玻璃导航栏 */
+.glass-header {
+  backdrop-filter: blur(32px) saturate(180%) brightness(1.1) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1) !important;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.15) !important;
+}
+
+.dark .glass-header {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2) !important;
+}
+
+/* 玻璃按钮样式 */
+.btn-glass {
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.1) !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.dark .btn-glass {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+}
+
+.btn-glass:hover {
+  transform: translateY(-2px) scale(1.05) !important;
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.25) !important;
+  background: linear-gradient(135deg, #8b5cf6, #06b6d4) !important;
+  color: white !important;
+  border-color: transparent !important;
+}
+
+/* 状态指示器 */
+.status-indicator {
+  background: linear-gradient(135deg, #10b981, #06b6d4) !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4) !important;
+  animation: pulse-glow 2s ease-in-out infinite !important;
+}
+
+.status-ping {
+  background: #10b981 !important;
+  animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite !important;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1 !important;
+    transform: scale(1) !important;
+  }
+  50% {
+    opacity: 0.8 !important;
+    transform: scale(1.05) !important;
+  }
+}
+
+/* 统计卡片 */
+.stat-badge {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+  border-radius: 9999px !important;
+  padding: 0.5rem 1rem !important;
+  backdrop-filter: blur(16px) !important;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .stat-badge {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9)) !important;
+  border: 1px solid rgba(71, 85, 105, 0.4) !important;
+}
+
+/* 标题区域 */
+.title-section {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+  backdrop-filter: blur(20px) !important;
+  position: relative !important;
+}
+
+.dark .title-section {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.title-section::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent) !important;
+}
+
+/* 标题输入框 */
+.title-input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: transparent !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  background-image: linear-gradient(135deg, #1e293b, #8b5cf6, #1e293b) !important;
+  transition: all 0.3s ease !important;
+}
+
+.dark .title-input {
+  background-image: linear-gradient(135deg, #ffffff, #a78bfa, #ffffff) !important;
+}
+
+.title-input::placeholder {
+  color: #94a3b8 !important;
+  background: none !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+.dark .title-input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+}
+
+/* 工具栏 */
+.toolbar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+  backdrop-filter: blur(20px) !important;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .toolbar {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+/* 工具按钮组 */
+.tool-group {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 1rem !important;
+  padding: 0.5rem !important;
+  backdrop-filter: blur(16px) !important;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .tool-group {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9)) !important;
+  border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+/* 工具按钮 */
+.tool-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  padding: 0.75rem 1rem !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  color: #64748b !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.dark .tool-btn {
+  color: #94a3b8 !important;
+}
+
+.tool-btn::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent) !important;
+  transition: left 0.6s ease !important;
+}
+
+.tool-btn:hover::before {
+  left: 100% !important;
+}
+
+.tool-btn:hover {
+  background: linear-gradient(135deg, #8b5cf6, #06b6d4) !important;
+  color: white !important;
+  transform: translateY(-1px) scale(1.05) !important;
+  box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3) !important;
+}
+
+.tool-btn-purple:hover {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1) !important;
+}
+
+.tool-btn-green:hover {
+  background: linear-gradient(135deg, #10b981, #06b6d4) !important;
+}
+
+.tool-btn-blue:hover {
+  background: linear-gradient(135deg, #3b82f6, #06b6d4) !important;
+}
+
+/* 编辑器区域 */
+.editor-area {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(248, 250, 252, 0.8)) !important;
+  position: relative !important;
+}
+
+.dark .editor-area {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(30, 41, 59, 0.8)) !important;
+}
+
+/* 编辑器文本区域 */
+.editor-textarea {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  resize: none !important;
+  font-family: 'Inter', 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 18px !important;
+  line-height: 1.8 !important;
+  color: #1e293b !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.01em !important;
+  text-rendering: optimizeLegibility !important;
+}
+
+.dark .editor-textarea {
+  color: #f8fafc !important;
+}
+
+.editor-textarea::placeholder {
+  color: #94a3b8 !important;
+  font-weight: 300 !important;
+  line-height: 1.7 !important;
+}
+
+.dark .editor-textarea::placeholder {
+  color: #64748b !important;
+}
+
+.editor-textarea:focus {
+  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.03) 0%, transparent 60%) !important;
+}
+
+.dark .editor-textarea:focus {
+  background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%) !important;
+}
+
+/* 装饰线条 */
+.decoration-line-top {
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent) !important;
+  height: 1px !important;
+  animation: glow-line 4s ease-in-out infinite !important;
+}
+
+.decoration-line-bottom {
+  background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent) !important;
+  height: 1px !important;
+  animation: glow-line 4s ease-in-out infinite 2s !important;
+}
+
+.decoration-line-left {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2)) !important;
+  width: 1px !important;
+  opacity: 0.6 !important;
+}
+
+@keyframes glow-line {
+  0%, 100% {
+    opacity: 0.3 !important;
+  }
+  50% {
+    opacity: 0.8 !important;
+  }
+}
+
+/* 状态栏 */
+.status-bar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.2) !important;
+  backdrop-filter: blur(20px) !important;
+  box-shadow: 0 -4px 16px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .status-bar {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+  border-top: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+/* 状态卡片 */
+.status-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 0.75rem !important;
+  padding: 1rem !important;
+  backdrop-filter: blur(16px) !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.05) !important;
+}
+
+.dark .status-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9)) !important;
+  border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.status-card:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15) !important;
+}
+
+/* 状态图标 */
+.status-icon {
+  border-radius: 0.5rem !important;
+  padding: 0.5rem !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+}
+
+.status-icon-blue {
+  background: linear-gradient(135deg, #3b82f6, #1e40af) !important;
+}
+
+.status-icon-green {
+  background: linear-gradient(135deg, #10b981, #047857) !important;
+}
+
+.status-icon-purple {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9) !important;
+}
+
+.status-icon-orange {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+}
+
+/* 快捷键提示 */
+.shortcut-hint {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9)) !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 1rem !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.dark .shortcut-hint {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9)) !important;
+  border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.shortcut-key {
+  background: linear-gradient(145deg, #f8fafc, #e2e8f0) !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 0.25rem !important;
+  padding: 0.25rem 0.5rem !important;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+.dark .shortcut-key {
+  background: linear-gradient(145deg, #334155, #1e293b) !important;
+  border: 1px solid #475569 !important;
+  color: #f1f5f9 !important;
+}
+
+/* 侧边预览面板 */
+.preview-panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+  border-left: 1px solid rgba(148, 163, 184, 0.2) !important;
+  backdrop-filter: blur(20px) !important;
+  animation: slideIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+}
+
+.dark .preview-panel {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+  border-left: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0 !important;
+    transform: translateX(100%) scale(0.95) !important;
+  }
+  to {
+    opacity: 1 !important;
+    transform: translateX(0) scale(1) !important;
+  }
+}
+
+.preview-header {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1)) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+}
+
+.dark .preview-header {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2)) !important;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.preview-icon {
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* 自定义滚动条 */
+.editor-scroll::-webkit-scrollbar {
+  width: 12px !important;
+}
+
+.editor-scroll::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.1) !important;
+  border-radius: 6px !important;
+}
+
+.editor-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #a78bfa, #8b5cf6, #7c3aed) !important;
+  border-radius: 6px !important;
+  border: 2px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2) !important;
+}
+
+.editor-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #8b5cf6, #7c3aed, #6d28d9) !important;
+  box-shadow: 0 4px 8px rgba(139, 92, 246, 0.3) !important;
+}
+
+.dark .editor-scroll::-webkit-scrollbar-track {
+  background: rgba(71, 85, 105, 0.2) !important;
+}
+
+.dark .editor-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #6366f1, #4f46e5, #4338ca) !important;
+  border: 2px solid rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .editor-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #4f46e5, #4338ca, #3730a3) !important;
+}
+
+/* 强制应用所有样式 */
+.editor-page * {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+}
+
+/* 响应式调整 */
+@media (max-width: 1024px) {
+  .floating-orb {
+    filter: blur(40px) !important;
+    opacity: 0.4 !important;
+  }
+  
+  .editor-textarea {
+    padding: 3rem 2rem !important;
+    font-size: 17px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .floating-orb {
+    filter: blur(30px) !important;
+    opacity: 0.3 !important;
+  }
+  
+  .editor-textarea {
+    padding: 2rem 1.5rem !important;
+    font-size: 16px !important;
+    line-height: 1.7 !important;
+  }
+  
+  .tool-btn span {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .editor-textarea {
+    padding: 1.5rem 1rem !important;
+    font-size: 15px !important;
+  }
+}

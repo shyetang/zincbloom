@@ -4,6 +4,12 @@
 /* 导入代码高亮样式 */
 @import './highlight.css';
 
+/* 引入编辑器专用样式 */
+@import './editor.css';
+
+/* 引入强制样式覆盖 - 必须放在最后 */
+@import './force-styles.css';
+
 /* 自定义CSS变量（主要用于主题色彩） */
 :root {
     /* 主题颜色变量 */
@@ -731,6 +737,7 @@ a {
 .line-clamp-1 {
     display: -webkit-box;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -738,6 +745,292 @@ a {
 .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* 编辑器页面强制样式覆盖 */
+.editor-page-bg {
+    background: linear-gradient(135deg, #f7fafc 0%, #e0f7fa 50%, #e8f5e8 100%) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.dark .editor-page-bg {
+    background: linear-gradient(135deg, #0f172a 0%, #312e81 30%, #1e3a8a 100%) !important;
+}
+
+/* 浮动动画球体 */
+@keyframes float-animation {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-12px);
+    }
+}
+
+.floating-orb {
+    animation: float-animation 8s ease-in-out infinite !important;
+    filter: blur(40px) !important;
+}
+
+.floating-orb-1 {
+    animation-delay: 0s !important;
+}
+
+.floating-orb-2 {
+    animation-delay: -3s !important;
+}
+
+.floating-orb-3 {
+    animation-delay: -6s !important;
+}
+
+/* 网格背景 */
+.grid-bg {
+    background-image: 
+        linear-gradient(rgba(139, 92, 246, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 92, 246, 0.08) 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+}
+
+/* 毛玻璃导航栏 */
+.glass-nav {
+    backdrop-filter: blur(64px) saturate(200%) brightness(1.1) !important;
+    background: rgba(255, 255, 255, 0.85) !important;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .glass-nav {
+    background: rgba(15, 23, 42, 0.85) !important;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.2) !important;
+}
+
+/* 按钮强制样式 */
+.btn-glass {
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1) !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+}
+
+.dark .btn-glass {
+    background: rgba(15, 23, 42, 0.9) !important;
+    border: 2px solid rgba(148, 163, 184, 0.3) !important;
+}
+
+.btn-glass:hover {
+    transform: translateY(-3px) scale(1.02) !important;
+    box-shadow: 0 12px 40px rgba(139, 92, 246, 0.2) !important;
+}
+
+/* 工具按钮组 */
+.tool-group {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+    border: 1px solid rgba(148, 163, 184, 0.2) !important;
+    border-radius: 1rem !important;
+    padding: 0.5rem !important;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.1) !important;
+    backdrop-filter: blur(20px) !important;
+}
+
+.dark .tool-group {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+    border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.tool-btn {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0.75rem !important;
+    padding: 0.75rem 1rem !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.tool-btn:hover {
+    background: linear-gradient(135deg, #8b5cf6, #06b6d4) !important;
+    color: white !important;
+    transform: translateY(-2px) scale(1.05) !important;
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.3) !important;
+}
+
+/* 编辑区域 */
+.editor-area {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9)) !important;
+    border: 1px solid rgba(148, 163, 184, 0.2) !important;
+    border-radius: 1.5rem !important;
+    backdrop-filter: blur(20px) !important;
+    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1) !important;
+}
+
+.dark .editor-area {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.9)) !important;
+    border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+/* 状态栏卡片 */
+.stat-card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95)) !important;
+    border: 1px solid rgba(148, 163, 184, 0.2) !important;
+    border-radius: 1rem !important;
+    padding: 1.5rem !important;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.08) !important;
+    backdrop-filter: blur(16px) !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+}
+
+.dark .stat-card {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95)) !important;
+    border: 1px solid rgba(71, 85, 105, 0.3) !important;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px) scale(1.02) !important;
+    box-shadow: 0 12px 32px rgba(139, 92, 246, 0.15) !important;
+}
+
+.stat-icon {
+    background: linear-gradient(135deg, #8b5cf6, #06b6d4) !important;
+    border-radius: 0.75rem !important;
+    padding: 0.5rem !important;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3) !important;
+}
+
+/* 编辑器文本区域 */
+.editor-textarea {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    resize: none !important;
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif !important;
+    font-size: 18px !important;
+    line-height: 1.8 !important;
+    color: #1e293b !important;
+    padding: 4rem 5rem !important;
+}
+
+.dark .editor-textarea {
+    color: #f8fafc !important;
+}
+
+.editor-textarea::placeholder {
+    color: #94a3b8 !important;
+    font-weight: 300 !important;
+    line-height: 1.7 !important;
+}
+
+.dark .editor-textarea::placeholder {
+    color: #64748b !important;
+}
+
+.editor-textarea:focus {
+    background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.03) 0%, transparent 60%) !important;
+}
+
+.dark .editor-textarea:focus {
+    background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 60%) !important;
+}
+
+/* 动画定义 - 确保关键动画效果生效 */
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes ping {
+    75%, 100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    50% {
+        opacity: .5;
+    }
+}
+
+.animate-float {
+    animation: float 6s ease-in-out infinite !important;
+}
+
+.animate-ping {
+    animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite !important;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite !important;
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+
+/* 背景网格图案 */
+.bg-grid-pattern {
+    background-image: 
+        linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px) !important;
+    background-size: 20px 20px !important;
+}
+
+/* 玻璃效果按钮 */
+.glass-button {
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.dark .glass-button {
+    background: rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 工具按钮样式 */
+.tool-button {
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.tool-button::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent) !important;
+    transition: left 0.6s ease !important;
+}
+
+.tool-button:hover::before {
+    left: 100% !important;
+}
+
+/* 标题输入框样式 */
+.title-input input {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    color: inherit !important;
+    background-clip: text !important;
+    -webkit-background-clip: text !important;
 }
